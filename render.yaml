@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: moduharu
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: JSONBIN_MASTER_KEY
+        sync: false
+      - key: JSONBIN_REQUESTS_BIN
+        sync: false
+      - key: JSONBIN_RANKINGS_BIN
+        sync: false
+      - key: JSONBIN_USERS_BIN
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
