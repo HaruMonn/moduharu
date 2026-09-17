@@ -69,3 +69,23 @@ body {
   background-color: var(--dark-bg);
   color: var(--dark-text);
 }
+
+/* =================== 부드러운 테마(다크/라이트) 전환 =================== */
+*,
+*::before,
+*::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* =================== 안전영역(Safe Area) =================== */
+/* 노치/홈바(뒤로가기·홈키) 영역을 침범하지 않도록 여백 확보 */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.nav-safe {
+  height: calc(72px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.main-content-pad {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}

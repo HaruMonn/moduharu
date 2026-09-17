@@ -3,6 +3,8 @@ import { Moon, Sun, Plus, MoreHorizontal, X, Trash2, Calendar, Timer as TimerIco
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import html2canvas from 'html2canvas';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -130,6 +132,7 @@ export default function App() {
   // =================== [스플래시 화면 (앱 시작 오프닝 영상)] ===================
   const [showSplash, setShowSplash] = useState(true);
   const [splashFade, setSplashFade] = useState(false);
+  const videoRef = useRef(null);
 
   const finishSplash = () => {
     setSplashFade(true);
@@ -139,7 +142,38 @@ export default function App() {
   useEffect(() => {
     // 영상이 재생되지 않을 경우를 대비한 안전장치: 6초 후 강제로 넘어감
     const fallback = setTimeout(finishSplash, 6000);
+    // 일부 안드로이드 웹뷰에서 autoplay가 막혀 회색 '재생' 화면이 뜨는 것 방지
+    const v = videoRef.current;
+    if (v) {
+      v.muted = true;
+      const p = v.play();
+      if (p && p.catch) p.catch(() => {});
+    }
     return () => clearTimeout(fallback);
+  }, []);
+
+  // =================== [뒤로가기 두 번 눌러 종료 (안드로이드)] ===================
+  const [exitToast, setExitToast] = useState(false);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let lastBack = 0;
+    let toastTimer = null;
+    const listener = CapApp.addListener('backButton', () => {
+      const now = Date.now();
+      if (now - lastBack < 2000) {
+        CapApp.exitApp();
+      } else {
+        lastBack = now;
+        setExitToast(true);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => setExitToast(false), 2000);
+      }
+    });
+    return () => {
+      listener.remove();
+      clearTimeout(toastTimer);
+    };
   }, []);
 
   // =================== [테마 색상 커스텀] ===================
@@ -206,6 +240,7 @@ export default function App() {
   });
   const [diaryText, setDiaryText] = useState('');
   const [diaryMood, setDiaryMood] = useState('🙂');
+  const [editingDiary, setEditingDiary] = useState(false);
 
   // =================== [주간 목표/회고 템플릿] ===================
   // 주간 목표: { weekKey, goals: [{id, text, done}], review: { good, bad, next } }
@@ -217,6 +252,7 @@ export default function App() {
   const [weeklyReviewGood, setWeeklyReviewGood] = useState('');
   const [weeklyReviewBad, setWeeklyReviewBad] = useState('');
   const [weeklyReviewNext, setWeeklyReviewNext] = useState('');
+  const [editingReview, setEditingReview] = useState(false);
 
   useEffect(() => { localStorage.setItem('lifestyle_weekly', JSON.stringify(weeklyPlans)); }, [weeklyPlans]);
 
@@ -597,7 +633,7 @@ export default function App() {
   const [pomodoroRemaining, setPomodoroRemaining] = useState(25 * 60); // 남은 초
   const [pomodoroCount, setPomodoroCount] = useState(0); // 완료한 뽀모도로 횟수
   const [isWhiteNoiseOn, setIsWhiteNoiseOn] = useState(false); // 백색소음 on/off
-  const [noiseType, setNoiseType] = useState('rain'); // rain | cafe | forest | waves
+  const [noiseType, setNoiseType] = useState('rain'); // rain | cafe | forest | waves | fire
   const [isFocusMode, setIsFocusMode] = useState(false); // 집중 모드 (타이머 중 방해 숨김)
   const audioRef = useRef(null);
   
@@ -711,6 +747,8 @@ export default function App() {
     const data = buffer.getChannelData(0);
 
     // 소리 유형별 데이터 생성
+    let fireBrown = 0;
+    let fireEnv = 0;
     for (let i = 0; i < bufferSize; i++) {
       if (type === 'rain') {
         // 빗소리: 백색소음 + 저역 필터 느낌
@@ -721,6 +759,14 @@ export default function App() {
       } else if (type === 'forest') {
         // 숲: 아주 잔잔한 바람 + 고요한 잡음
         data[i] = (Math.random() * 2 - 1) * 0.18;
+      } else if (type === 'fire') {
+        // 장작: 저역 우르릉(갈색 잡음) + 불똥 튀는 '탁탁' 크래클
+        const w = Math.random() * 2 - 1;
+        fireBrown = (fireBrown + 0.012 * w) / 1.012;
+        if (fireEnv <= 0.005 && Math.random() < 0.0004) fireEnv = 1.0;
+        fireEnv *= 0.9996;
+        const crackle = (Math.random() * 2 - 1) * fireEnv;
+        data[i] = fireBrown * 2.8 + crackle * 0.55;
       } else {
         // 파도: 느리게 오르내리는 잡음 (롤리지 않은 파도 느낌)
         const wave = Math.sin(i / (ctx.sampleRate * 0.9)) * 0.5 + 0.5;
@@ -743,6 +789,11 @@ export default function App() {
       // 카페: 로우패스로 웅성거리는 저음 강조
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass'; lp.frequency.value = 800;
+      source.connect(lp); lp.connect(master);
+    } else if (type === 'fire') {
+      // 장작: 로우패스로 우르릉거리는 저음을 부드럽게
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 1500;
       source.connect(lp); lp.connect(master);
     } else {
       source.connect(master);
@@ -906,8 +957,15 @@ export default function App() {
     const k = todayKey();
     setDiaries({ ...diaries, [k]: { text: diaryText, mood: diaryMood, at: new Date().toISOString() } });
     setDiaryText('');
+    setEditingDiary(false);
   };
   const todayDiary = diaries[todayKey()];
+  const startEditDiary = () => {
+    if (!todayDiary) return;
+    setDiaryText(todayDiary.text);
+    setDiaryMood(todayDiary.mood);
+    setEditingDiary(true);
+  };
 
   // ---- 주간 목표/회고 로직 ----
   // 이번 주 키 (YYYY-WW, 월요일 시작)
@@ -954,6 +1012,14 @@ export default function App() {
     const cur = weeklyPlans[wk] || { goals: [], review: {} };
     const updated = { ...weeklyPlans, [wk]: { ...cur, review: { good: weeklyReviewGood, bad: weeklyReviewBad, next: weeklyReviewNext } } };
     setWeeklyPlans(updated);
+    setEditingReview(false);
+  };
+  const startEditReview = () => {
+    const r = currentWeek.review || {};
+    setWeeklyReviewGood(r.good || '');
+    setWeeklyReviewBad(r.bad || '');
+    setWeeklyReviewNext(r.next || '');
+    setEditingReview(true);
   };
 
   // 주차 표시용 라벨
@@ -1244,13 +1310,13 @@ export default function App() {
   // 공통 헤더 렌더링 함수
   const renderHeader = (title, subtitle) => (
     <header className="sticky top-0 z-20 px-6 py-5 bg-white/80 dark:bg-purple-900/80 backdrop-blur-md border-b border-slate-100 dark:border-purple-800 flex justify-between items-center">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-sm text-slate-500 dark:text-purple-300">{subtitle}</span>
+      <div className="min-w-0 flex-1">
+        <h1 className="text-lg font-bold tracking-tight whitespace-nowrap truncate">{title}</h1>
+        <div className="flex items-center gap-2 mt-0.5 min-w-0">
+          <span className="text-sm text-slate-500 dark:text-purple-300 whitespace-nowrap truncate">{subtitle}</span>
         </div>
       </div>
-      <div className="flex gap-3">
+      <div className="flex gap-2 shrink-0">
         {/* 통계 버튼 (할 일 / 타이머 탭에서 보임) */}
         {(activeTab === 'todo' || activeTab === 'timer') && (
           <button onClick={() => setShowStats(true)} className="p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
@@ -1354,18 +1420,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-purple-950 text-slate-800 dark:text-purple-50 transition-colors duration-300">
-      <div className="max-w-md mx-auto h-screen bg-white dark:bg-purple-900 shadow-sm relative overflow-hidden flex flex-col pb-[72px]">
+      <div className="max-w-md mx-auto h-screen bg-white dark:bg-purple-900 shadow-sm relative overflow-hidden flex flex-col pt-safe main-content-pad">
 
         {/* ======================= 스플래시 화면 (앱 시작) ======================= */}
         {showSplash && (
           <div className={`absolute inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black transition-opacity duration-500 ease-out ${splashFade ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
             {/* 오프닝 영상 (하양님이 보내주신 인트로) */}
             <video
+              ref={videoRef}
               src="/opening.mp4"
-              className="absolute inset-0 w-full h-full object-cover"
+              poster="/splash-bg.jpg"
+              className="absolute inset-0 w-full h-full object-cover bg-black"
               autoPlay
               muted
               playsInline
+              preload="auto"
               onEnded={finishSplash}
             />
           </div>
@@ -1445,7 +1514,7 @@ export default function App() {
                       options={[{value:'공부',label:'공부'},{value:'개발',label:'개발'},{value:'운동',label:'운동'},{value:'개인',label:'개인'},{value:'기타',label:'기타'}]}
                       className="w-24 shrink-0"
                     />
-                    <input type="text" value={newTodoText} onChange={(e) => setNewTodoText(e.target.value)} placeholder="오늘 어떤 일을 완료할까요?" className="flex-1 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                    <input type="text" value={newTodoText} onChange={(e) => setNewTodoText(e.target.value)} placeholder="오늘 어떤 일을 완료할까요?" className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   </div>
                   <button type="submit" disabled={!newTodoText.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow-md disabled:opacity-50 disabled:shadow-none">
                     할 일 추가하기
@@ -1597,7 +1666,7 @@ export default function App() {
               <div className="shrink-0 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
                 <h3 className="font-bold text-sm mb-4 text-slate-700 dark:text-purple-100 flex items-center gap-1.5">🎵 집중 백색소음</h3>
                 <div className="flex gap-2 mb-4">
-                  {[{k:'rain',l:'빗소리'},{k:'cafe',l:'카페'},{k:'forest',l:'숲'},{k:'waves',l:'파도'}].map(opt => (
+                  {[{k:'rain',l:'빗소리'},{k:'cafe',l:'카페'},{k:'forest',l:'숲'},{k:'fire',l:'장작'},{k:'waves',l:'파도'}].map(opt => (
                     <button key={opt.k} onClick={() => { setNoiseType(opt.k); setIsWhiteNoiseOn(true); }} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${noiseType === opt.k && isWhiteNoiseOn ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{opt.l}</button>
                   ))}
                 </div>
@@ -1711,7 +1780,7 @@ export default function App() {
                 <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100">🔁 나의 루틴</h3>
                 <form onSubmit={addRoutine} className="flex flex-col gap-2 mb-4">
                   <div className="flex gap-2">
-                    <input type="text" value={newRoutineText} onChange={(e) => setNewRoutineText(e.target.value)} placeholder="예: 아침 러닝 30분" className="flex-1 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                    <input type="text" value={newRoutineText} onChange={(e) => setNewRoutineText(e.target.value)} placeholder="예: 아침 러닝 30분" className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                     <SoftSelect
                       value={newRoutineFreq}
                       onChange={setNewRoutineFreq}
@@ -1749,8 +1818,8 @@ export default function App() {
                 <form onSubmit={addGoal} className="flex flex-col gap-2 mb-4">
                   <input type="text" value={newGoalText} onChange={(e) => setNewGoalText(e.target.value)} placeholder="예: 책 10권 읽기" className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   <div className="flex gap-2">
-                    <input type="number" value={newGoalTarget} onChange={(e) => setNewGoalTarget(e.target.value)} min="1" className="flex-1 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-bold" placeholder="목표량" />
-                    <button type="submit" disabled={!newGoalText.trim()} className="flex-1 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-2.5 text-sm hover:opacity-90 transition shadow disabled:opacity-50">목표 추가</button>
+                    <input type="number" value={newGoalTarget} onChange={(e) => setNewGoalTarget(e.target.value)} min="1" className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-bold" placeholder="목표량" />
+                    <button type="submit" disabled={!newGoalText.trim()} className="shrink-0 whitespace-nowrap px-4 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-2.5 text-sm hover:opacity-90 transition shadow disabled:opacity-50">목표 추가</button>
                   </div>
                 </form>
                 <div className="space-y-3">
@@ -1781,10 +1850,13 @@ export default function App() {
               {/* 4. 감정/한 줄 일기 */}
               <div className="shrink-0 mb-4 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
                 <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100">📝 오늘의 한 줄 일기</h3>
-                {todayDiary ? (
+                {todayDiary && !editingDiary ? (
                   <div className="bg-slate-50 dark:bg-purple-950 rounded-xl p-4 border border-slate-100 dark:border-purple-800">
-                    <div className="text-3xl mb-2">{todayDiary.mood}</div>
-                    <p className="text-sm text-slate-700 dark:text-purple-100 font-bold whitespace-pre-wrap">{todayDiary.text}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-3xl">{todayDiary.mood}</div>
+                      <button onClick={startEditDiary} className="shrink-0 text-xs font-bold text-slate-400 dark:text-purple-300 hover:text-indigo-500 dark:hover:text-indigo-300 transition">✏️ 수정</button>
+                    </div>
+                    <p className="text-sm text-slate-700 dark:text-purple-100 font-bold whitespace-pre-wrap mt-1">{todayDiary.text}</p>
                   </div>
                 ) : (
                   <form onSubmit={saveDiary} className="flex flex-col gap-3">
@@ -1794,7 +1866,7 @@ export default function App() {
                       ))}
                     </div>
                     <textarea value={diaryText} onChange={(e) => setDiaryText(e.target.value)} placeholder="오늘 하루는 어땠나요? 한 줄로 남겨보세요." rows={3} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold resize-none" />
-                    <button type="submit" disabled={!diaryText.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow disabled:opacity-50">기록하기</button>
+                    <button type="submit" disabled={!diaryText.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow disabled:opacity-50">{editingDiary ? '수정 완료' : '기록하기'}</button>
                   </form>
                 )}
               </div>
@@ -1811,7 +1883,7 @@ export default function App() {
                     <span className="text-[10px] font-bold text-emerald-500 dark:text-emerald-300">{currentWeek.goals.filter(g => g.done).length}/{currentWeek.goals.length} 달성</span>
                   </div>
                   <form onSubmit={addWeeklyGoal} className="flex gap-2 mb-2">
-                    <input type="text" value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} placeholder="예: 운동 3회, 책 1권 읽기" className="flex-1 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                    <input type="text" value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} placeholder="예: 운동 3회, 책 1권 읽기" className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                     <button type="submit" disabled={!newWeeklyGoal.trim()} className="shrink-0 px-4 py-2 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold text-sm hover:opacity-90 transition shadow disabled:opacity-50">목표 추가</button>
                   </form>
                   <div className="space-y-1.5">
@@ -1830,8 +1902,11 @@ export default function App() {
                 {/* 이번 주 회고 */}
                 <div>
                   <span className="text-xs font-bold text-slate-500 dark:text-purple-300 block mb-2">📝 이번 주 회고</span>
-                  {currentWeek.review && (currentWeek.review.good || currentWeek.review.bad || currentWeek.review.next) ? (
+                  {currentWeek.review && (currentWeek.review.good || currentWeek.review.bad || currentWeek.review.next) && !editingReview ? (
                     <div className="space-y-2">
+                      <div className="flex justify-end">
+                        <button onClick={startEditReview} className="text-xs font-bold text-slate-400 dark:text-purple-300 hover:text-indigo-500 dark:hover:text-indigo-300 transition">✏️ 수정</button>
+                      </div>
                       {currentWeek.review.good && <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-sm"><span className="font-bold text-emerald-600 dark:text-emerald-300">👍 잘한 점</span><p className="text-slate-700 dark:text-purple-100 font-bold whitespace-pre-wrap">{currentWeek.review.good}</p></div>}
                       {currentWeek.review.bad && <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-sm"><span className="font-bold text-amber-600 dark:text-amber-300">😅 아쉬운 점</span><p className="text-slate-700 dark:text-purple-100 font-bold whitespace-pre-wrap">{currentWeek.review.bad}</p></div>}
                       {currentWeek.review.next && <div className="bg-sky-50 dark:bg-sky-900/20 rounded-xl p-3 text-sm"><span className="font-bold text-sky-600 dark:text-sky-300">🚀 다음 주 다짐</span><p className="text-slate-700 dark:text-purple-100 font-bold whitespace-pre-wrap">{currentWeek.review.next}</p></div>}
@@ -1841,7 +1916,7 @@ export default function App() {
                       <input type="text" value={weeklyReviewGood} onChange={(e) => setWeeklyReviewGood(e.target.value)} placeholder="👍 잘한 점" className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                       <input type="text" value={weeklyReviewBad} onChange={(e) => setWeeklyReviewBad(e.target.value)} placeholder="😅 아쉬운 점" className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                       <input type="text" value={weeklyReviewNext} onChange={(e) => setWeeklyReviewNext(e.target.value)} placeholder="🚀 다음 주 다짐" className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
-                      <button onClick={saveWeeklyReview} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-2.5 text-sm hover:opacity-90 transition shadow">회고 저장</button>
+                      <button onClick={saveWeeklyReview} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-2.5 text-sm hover:opacity-90 transition shadow">{editingReview ? '수정 완료' : '회고 저장'}</button>
                     </div>
                   )}
                 </div>
@@ -2155,7 +2230,7 @@ export default function App() {
         )}
 
         {/* ======================= 하단 네비게이션 ======================= */}
-        <nav className="absolute bottom-0 w-full h-[72px] bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40 pb-safe">
+        <nav className="absolute bottom-0 w-full nav-safe bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40">
           <button onClick={() => setActiveTab('todo')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'todo' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <CheckSquare size={24} className={activeTab === 'todo' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">할 일</span>
@@ -2181,6 +2256,13 @@ export default function App() {
             <span className="text-[10px] font-bold">요청</span>
           </button>
         </nav>
+
+        {/* 뒤로가기 종료 안내 토스트 */}
+        {exitToast && (
+          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[120] bg-slate-800 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg whitespace-nowrap">
+            뒤로 가기를 한 번 더 누르면 종료돼요
+          </div>
+        )}
 
         {/* ======================= 알림 패널 ======================= */}
         {showNotif && (
