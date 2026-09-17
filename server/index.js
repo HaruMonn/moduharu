@@ -384,6 +384,14 @@ app.post('/api/admin/verify', (req, res) => {
   res.json({ ok: true });
 });
 
+// =================== 프로덕션 정적 서빙 (Render 등 단일 서비스용) ===================
+const distDir = path.join(__dirname, '..', 'dist');
+app.use(express.static(distDir));
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(distDir, 'index.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`✅ 백엔드 서버 실행 중: http://localhost:${PORT}`);
 });

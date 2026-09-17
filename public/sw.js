@@ -1,4 +1,4 @@
-const CACHE_NAME = 'today-record-v1';
+const CACHE_NAME = 'moduharu-v2';
 const ASSETS = [
   '/',
   '/index.html',
