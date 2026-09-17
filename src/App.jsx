@@ -955,6 +955,15 @@ export default function App() {
   const saveDiary = (e) => {
     e.preventDefault();
     const k = todayKey();
+    if (editingDiary && !diaryText.trim()) {
+      // 수정 중에 내용을 전부 지웠다면 오늘 일기를 삭제해 깨끗한 초기 상태로
+      const next = { ...diaries };
+      delete next[k];
+      setDiaries(next);
+      setDiaryText('');
+      setEditingDiary(false);
+      return;
+    }
     setDiaries({ ...diaries, [k]: { text: diaryText, mood: diaryMood, at: new Date().toISOString() } });
     setDiaryText('');
     setEditingDiary(false);
@@ -1866,7 +1875,7 @@ export default function App() {
                       ))}
                     </div>
                     <textarea value={diaryText} onChange={(e) => setDiaryText(e.target.value)} placeholder="오늘 하루는 어땠나요? 한 줄로 남겨보세요." rows={3} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold resize-none" />
-                    <button type="submit" disabled={!diaryText.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow disabled:opacity-50">{editingDiary ? '수정 완료' : '기록하기'}</button>
+                    <button type="submit" disabled={!editingDiary && !diaryText.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow disabled:opacity-50">{editingDiary ? (diaryText.trim() ? '수정 완료' : '삭제') : '기록하기'}</button>
                   </form>
                 )}
               </div>
