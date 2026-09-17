@@ -64,7 +64,7 @@ function SoftSelect({ value, options, onChange, className = '' }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between gap-2 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-2xl px-3.5 py-2.5 text-sm font-bold text-slate-600 dark:text-purple-200 outline-none focus:ring-2 focus:ring-indigo-400/50 transition-all hover:bg-slate-100 dark:hover:bg-purple-800/60 shadow-sm"
+        className="w-full flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-2xl px-3 py-2.5 text-xs font-bold text-slate-600 dark:text-purple-200 outline-none focus:ring-2 focus:ring-indigo-400/50 transition-all hover:bg-slate-100 dark:hover:bg-purple-800/60 shadow-sm"
       >
         <span className="truncate">{selected ? selected.label : '선택'}</span>
         <svg className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -78,7 +78,7 @@ function SoftSelect({ value, options, onChange, className = '' }) {
               key={o.value}
               type="button"
               onClick={() => { onChange(o.value); setOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 text-sm font-bold transition-colors ${o.value === value ? 'bg-indigo-50 dark:bg-purple-800 text-indigo-600 dark:text-purple-200' : 'text-slate-600 dark:text-purple-300 hover:bg-slate-50 dark:hover:bg-purple-800/60'}`}
+              className={`w-full text-left px-3 py-2.5 text-xs font-bold transition-colors ${o.value === value ? 'bg-indigo-50 dark:bg-purple-800 text-indigo-600 dark:text-purple-200' : 'text-slate-600 dark:text-purple-300 hover:bg-slate-50 dark:hover:bg-purple-800/60'}`}
             >
               {o.label}
             </button>
