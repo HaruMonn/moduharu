@@ -127,15 +127,19 @@ export default function App() {
     }
   };
 
-  // =================== [스플래시 화면 (앱 시작 애니메이션)] ===================
+  // =================== [스플래시 화면 (앱 시작 오프닝 영상)] ===================
   const [showSplash, setShowSplash] = useState(true);
   const [splashFade, setSplashFade] = useState(false);
 
+  const finishSplash = () => {
+    setSplashFade(true);
+    setTimeout(() => setShowSplash(false), 600);
+  };
+
   useEffect(() => {
-    // 1.8초 후 페이드 아웃 시작, 2.5초 후 완전히 제거
-    const t1 = setTimeout(() => setSplashFade(true), 1800);
-    const t2 = setTimeout(() => setShowSplash(false), 2500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // 영상이 재생되지 않을 경우를 대비한 안전장치: 6초 후 강제로 넘어감
+    const fallback = setTimeout(finishSplash, 6000);
+    return () => clearTimeout(fallback);
   }, []);
 
   // =================== [테마 색상 커스텀] ===================
@@ -1354,22 +1358,16 @@ export default function App() {
 
         {/* ======================= 스플래시 화면 (앱 시작) ======================= */}
         {showSplash && (
-          <div className={`absolute inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden transition-opacity duration-700 ease-out ${splashFade ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-            {/* 배경 이미지 (하양님이 만든 그림, 글씨 없음) */}
-            <img src="/splash-bg.jpg" alt="모두의 하루" className="absolute inset-0 w-full h-full object-cover" />
-
-            {/* "모두의 하루" 타이틀 (팝아웃 등장) */}
-            <div className="relative z-10 splash-title text-center px-6">
-              <h1 className="text-4xl font-black text-white drop-shadow-lg tracking-tight">모두의 하루</h1>
-              <p className="text-white/85 text-sm font-bold mt-2 drop-shadow">하루를 알차게 기록하고 성장해요</p>
-            </div>
-
-            {/* 하단 로딩 인디케이터 */}
-            <div className="absolute inset-x-0 bottom-0 z-10 mb-14 flex justify-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-white/90 splash-dot" style={{ animationDelay: '0ms' }}></span>
-              <span className="w-2 h-2 rounded-full bg-white/90 splash-dot" style={{ animationDelay: '150ms' }}></span>
-              <span className="w-2 h-2 rounded-full bg-white/90 splash-dot" style={{ animationDelay: '300ms' }}></span>
-            </div>
+          <div className={`absolute inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black transition-opacity duration-500 ease-out ${splashFade ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+            {/* 오프닝 영상 (하양님이 보내주신 인트로) */}
+            <video
+              src="/opening.mp4"
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay
+              muted
+              playsInline
+              onEnded={finishSplash}
+            />
           </div>
         )}
 
