@@ -16,6 +16,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+*.env
+!.env.example
 
 # Android 빌드 산출물 / 로컬 설정 (커밋 금지)
 android/build/
