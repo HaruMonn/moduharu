@@ -1,6 +1,6 @@
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
-import { COLOR_OPTIONS, TIMER_COLORS } from './constants.js';
+import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS } from './constants.js';
 import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Timer as TimerIcon } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
@@ -9,7 +9,7 @@ ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tool
 
 export default function App() {
   const {
-    activeTab, setActiveTab, selectedDate, setSelectedDate, showStats, setShowStats,
+    activeTab, setActiveTab, selectedDay, setSelectedDay, showStats, setShowStats,
     showSettings, setShowSettings, showOnboarding, onboardingFade, showPolicy, setShowPolicy,
     showDday, setShowDday, serverUrlInput, setServerUrlInput, currentServerBase, saveServerUrl,
     showSplash, splashFade, videoRef, finishSplash, exitToast, themeColor,
@@ -27,7 +27,7 @@ export default function App() {
     handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend,
     addAnnouncement, deleteAnnouncement, newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
-    setFormStart, formEnd, setFormEnd, formColor, setFormColor, isTimerRunning,
+    setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
     timerSeconds, currentStudy, setCurrentStudy, timerColor, setTimerColor, isPomodoro,
     pomodoroPhase, pomodoroRemaining, pomodoroCount, isWhiteNoiseOn, setIsWhiteNoiseOn, noiseType,
     setNoiseType, isFocusMode, setIsFocusMode, isTimerModalOpen, setIsTimerModalOpen, recordFormTitle,
@@ -198,19 +198,16 @@ export default function App() {
         {/* ======================= 시간표 화면 ======================= */}
         {activeTab === 'timetable' && (
           <div className="flex flex-col flex-1 min-h-0">
-            {renderHeader('오늘의 일상', `${selectedDate.getMonth()+1}월 ${selectedDate.getDate()}일`)}
-            {/* 주간 달력 네비게이션 (7일 선택) */}
+            {renderHeader('주간 시간표', `${DAY_LABELS[selectedDay]}요일`)}
+            {/* 요일 선택 네비게이션 (일~토) */}
             <div className="px-4 pt-3 pb-1 flex gap-1 bg-white dark:bg-purple-900">
-              {Array.from({ length: 7 }).map((_, i) => {
-                const d = new Date(selectedDate);
-                d.setDate(selectedDate.getDate() - selectedDate.getDay() + i);
-                const isSel = d.toDateString() === selectedDate.toDateString();
-                const isToday = d.toDateString() === new Date().toDateString();
-                const dow = ['일','월','화','수','목','금','토'][d.getDay()];
+              {DAY_LABELS.map((dow, i) => {
+                const isSel = i === selectedDay;
+                const isToday = i === new Date().getDay();
                 return (
-                  <button key={i} onClick={() => setSelectedDate(d)} className={`flex-1 flex flex-col items-center py-2 rounded-xl transition ${isSel ? 'bg-indigo-500 text-white shadow' : 'hover:bg-slate-100 dark:hover:bg-purple-800'}`}>
-                    <span className={`text-[10px] font-bold ${isSel ? 'text-indigo-100' : 'text-slate-400 dark:text-purple-300'}`}>{dow}</span>
-                    <span className={`text-sm font-black ${isSel ? '' : (isToday ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100')}`}>{d.getDate()}</span>
+                  <button key={i} onClick={() => setSelectedDay(i)} className={`flex-1 flex flex-col items-center py-2 rounded-xl transition ${isSel ? 'bg-indigo-500 text-white shadow' : 'hover:bg-slate-100 dark:hover:bg-purple-800'}`}>
+                    <span className={`text-[10px] font-bold ${isSel ? 'text-indigo-100' : 'text-slate-400 dark:text-purple-300'}`}>{isToday ? '오늘' : '요일'}</span>
+                    <span className={`text-sm font-black ${isSel ? '' : (isToday ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100')}`}>{dow}</span>
                   </button>
                 );
               })}
@@ -229,7 +226,7 @@ export default function App() {
                   </div>
                 ))}
                 <div className="absolute top-0 left-16 right-2 bottom-0">
-                  {events.map((event) => (
+                  {events.filter((event) => event.day === selectedDay).map((event) => (
                     <div key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 p-3 rounded-2xl backdrop-blur-sm transition-all hover:scale-[1.02] shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${event.start * 4}rem`, height: `${(event.end - event.start) * 4}rem` }}>
                       <h3 className="font-bold text-[14px] leading-tight overflow-hidden text-ellipsis">{event.title}</h3>
                     </div>
@@ -1141,6 +1138,10 @@ export default function App() {
             <div className="bg-white dark:bg-purple-900 rounded-t-3xl p-6 shadow-2xl pb-[100px] animate-in slide-in-from-bottom-full duration-300">
               <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold">{(editingEvent ? '일정 수정' : '새 일정 추가')}</h2><button onClick={() => setIsModalOpen(false)} className="p-2 bg-slate-100 dark:bg-purple-800 rounded-full hover:bg-slate-200 transition"><X size={20} /></button></div>
               <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">요일</label>
+                  <div className="flex gap-1">{DAY_LABELS.map((dow, i) => ( <button key={i} onClick={() => setFormDay(i)} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition ${formDay === i ? 'bg-indigo-500 text-white shadow' : 'bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300 hover:bg-slate-100 dark:hover:bg-purple-800'}`}>{dow}</button> ))}</div>
+                </div>
                 <div><label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">일정 이름</label><input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="예: 독서, 코딩, 운동..." className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" /></div>
                 <div className="flex gap-4">
                   <div className="flex-1"><label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">시작 시간</label><input type="time" value={formStart} onChange={(e) => setFormStart(e.target.value)} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" /></div>

@@ -41,7 +41,7 @@ export function useAppState() {
   });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('todo'); 
-  const [selectedDate, setSelectedDate] = useState(new Date()); // 시간표 선택 날짜 (주간 달력)
+  const [selectedDay, setSelectedDay] = useState(new Date().getDay()); // 시간표 선택 요일 (0=일 ... 6=토)
   const [showStats, setShowStats] = useState(false); // 통계 모달 상태
   const [showSettings, setShowSettings] = useState(false); // 설정 모달 상태
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('lifestyle_onboarded')); // 온보딩
@@ -150,7 +150,11 @@ export function useAppState() {
   
   const [events, setEvents] = useState(() => {
     const saved = localStorage.getItem('lifestyle_events');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      const today = new Date().getDay();
+      return JSON.parse(saved).map(e => ({ ...e, day: typeof e.day === 'number' ? e.day : today }));
+    }
+    return [];
   });
 
   const [studyRecords, setStudyRecords] = useState(() => {
@@ -566,6 +570,7 @@ export function useAppState() {
   const [formStart, setFormStart] = useState('09:00');
   const [formEnd, setFormEnd] = useState('10:00');
   const [formColor, setFormColor] = useState(COLOR_OPTIONS[0].value);
+  const [formDay, setFormDay] = useState(new Date().getDay()); // 일정 추가/수정 시 요일
 
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -1175,9 +1180,9 @@ export function useAppState() {
 
   const openModal = (event = null) => {
     if (event) {
-      setEditingEvent(event); setFormTitle(event.title); setFormStart(decimalToTime(event.start)); setFormEnd(decimalToTime(event.end)); setFormColor(event.color);
+      setEditingEvent(event); setFormTitle(event.title); setFormStart(decimalToTime(event.start)); setFormEnd(decimalToTime(event.end)); setFormColor(event.color); setFormDay(typeof event.day === 'number' ? event.day : selectedDay);
     } else {
-      setEditingEvent(null); setFormTitle(''); setFormStart('09:00'); setFormEnd('10:00'); setFormColor(COLOR_OPTIONS[0].value);
+      setEditingEvent(null); setFormTitle(''); setFormStart('09:00'); setFormEnd('10:00'); setFormColor(COLOR_OPTIONS[0].value); setFormDay(selectedDay);
     }
     setIsModalOpen(true);
   };
@@ -1185,8 +1190,8 @@ export function useAppState() {
   const saveEvent = () => {
     const startDec = timeToDecimal(formStart); const endDec = timeToDecimal(formEnd);
     if (startDec >= endDec) return alert('종료 시간은 시작 시간보다 늦어야 합니다.');
-    if (editingEvent) setEvents(events.map(e => e.id === editingEvent.id ? { ...e, title: formTitle, start: startDec, end: endDec, color: formColor } : e));
-    else setEvents([...events, { id: Date.now(), title: formTitle || '새 일정', start: startDec, end: endDec, color: formColor }]);
+    if (editingEvent) setEvents(events.map(e => e.id === editingEvent.id ? { ...e, title: formTitle, start: startDec, end: endDec, color: formColor, day: formDay } : e));
+    else setEvents([...events, { id: Date.now(), title: formTitle || '새 일정', start: startDec, end: endDec, color: formColor, day: formDay }]);
     setIsModalOpen(false);
   };
 
@@ -1375,7 +1380,7 @@ export function useAppState() {
 
   return {
     isDarkMode, setIsDarkMode, currentTime, setCurrentTime, activeTab, setActiveTab,
-    selectedDate, setSelectedDate, showStats, setShowStats, showSettings, setShowSettings,
+    selectedDay, setSelectedDay, showStats, setShowStats, showSettings, setShowSettings,
     showOnboarding, setShowOnboarding, onboardingFade, setOnboardingFade, showPolicy, setShowPolicy,
     showDday, setShowDday, serverUrlInput, setServerUrlInput, currentServerBase, setCurrentServerBase,
     saveServerUrl, showSplash, setShowSplash, splashFade, setSplashFade, videoRef,
@@ -1401,7 +1406,7 @@ export function useAppState() {
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
     setFormTitle, formStart, setFormStart, formEnd, setFormEnd, formColor,
-    setFormColor, isTimerRunning, setIsTimerRunning, timerSeconds, setTimerSeconds, currentStudy,
+    setFormColor, formDay, setFormDay, isTimerRunning, setIsTimerRunning, timerSeconds, setTimerSeconds, currentStudy,
     setCurrentStudy, timerStartTime, setTimerStartTime, timerColor, setTimerColor, isPomodoro,
     setIsPomodoro, pomodoroPhase, setPomodoroPhase, pomodoroRemaining, setPomodoroRemaining, pomodoroCount,
     setPomodoroCount, isWhiteNoiseOn, setIsWhiteNoiseOn, noiseType, setNoiseType, isFocusMode,
