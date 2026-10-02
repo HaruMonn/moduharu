@@ -8,8 +8,11 @@ import { COLOR_OPTIONS, TIMER_COLORS } from '../constants.js';
 
 // =================== [백엔드 API 연동 설정] ===================
 // 개발(브라우저): '/api' (Vite 프록시)
-// APK 빌드: VITE_API_BASE 환경변수로 PC IP 지정 (예: http://10.60.30.134:3001/api)
-const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE || '/api';
+// APK(네이티브): VITE_API_BASE가 있으면 우선, 없으면 Render 서버를 기본값으로 사용
+// 앱 설정에서 서버 주소를 저장하면 localStorage 값이 항상 우선 적용됨
+const DEFAULT_API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  (Capacitor.isNativePlatform() ? 'https://moduharu.onrender.com/api' : '/api');
 const SERVER_URL_KEY = 'moduharu_server_url';
 // 앱 설정에서 저장한 서버 주소가 있으면 우선 사용 (와이파이/핫스팟이 바뀌어 IP가 달라져도 재빌드 없이 수정 가능)
 let API_BASE = (() => {
