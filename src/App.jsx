@@ -199,27 +199,59 @@ export default function App() {
         {activeTab === 'timetable' && (
           <div className="flex flex-col flex-1 min-h-0">
             {renderHeader('주간 시간표', '일~토 요일별')}
-            {/* 주간 그리드: 7개 요일이 한 화면에 나란히 표시 */}
-            <div className="flex-1 overflow-y-auto p-2">
-              <div className="grid grid-cols-7 gap-1">
+            {/* 요일 헤더 */}
+            <div className="px-2 pt-2 pb-1 flex bg-white dark:bg-purple-900 shrink-0">
+              <div className="w-10 shrink-0"></div>
+              <div className="flex-1 grid grid-cols-7 gap-1">
                 {DAY_LABELS.map((dow, i) => {
                   const isToday = i === new Date().getDay();
-                  const dayEvents = events.filter((e) => e.day === i).sort((a, b) => a.start - b.start);
                   return (
-                    <div key={i} className="flex flex-col gap-1">
-                      <div className={`text-center py-1.5 rounded-lg text-xs font-black ${isToday ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{dow}</div>
-                      {dayEvents.map((event) => (
-                        <button key={event.id} onClick={() => openModal(event)} className={`rounded-lg px-1.5 py-2 text-left transition hover:scale-[1.03] shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`}>
-                          <div className="text-[9px] font-bold opacity-70 leading-none">{decimalToTime(event.start)}</div>
-                          <div className="text-[11px] font-bold leading-tight mt-0.5 break-words">{event.title}</div>
-                        </button>
-                      ))}
-                      {dayEvents.length === 0 && (
-                        <button onClick={() => openModal()} className="rounded-lg py-3 text-[10px] font-bold text-slate-300 dark:text-purple-500 border border-dashed border-slate-200 dark:border-purple-700">+</button>
-                      )}
-                    </div>
+                    <div key={i} className={`text-center py-1.5 rounded-lg text-xs font-black ${isToday ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{dow}</div>
                   );
                 })}
+              </div>
+            </div>
+            {/* 시간 그리드 (00:00 ~ 24:00) */}
+            <div className="flex-1 overflow-y-auto px-2 pt-3 pb-4">
+              <div className="flex">
+                {/* 시간축 라벨 */}
+                <div className="w-10 shrink-0 relative" style={{ height: `${24 * 56}px` }}>
+                  {Array.from({ length: 25 }).map((_, i) => (
+                    <div key={i} className="absolute right-1 -translate-y-1/2" style={{ top: `${i * 56}px` }}>
+                      <span className="text-[8px] font-bold text-slate-400 dark:text-purple-300">{String(i).padStart(2, '0')}:00</span>
+                    </div>
+                  ))}
+                </div>
+                {/* 7개 요일 컬럼 */}
+                <div className="flex-1 grid grid-cols-7 gap-1">
+                  {DAY_LABELS.map((dow, i) => {
+                    const isToday = i === new Date().getDay();
+                    const dayEvents = events.filter((e) => e.day === i);
+                    return (
+                      <div key={i} className="relative" style={{ height: `${24 * 56}px` }}>
+                        {Array.from({ length: 24 }).map((_, h) => (
+                          <div key={h} className="absolute left-0 right-0 border-b border-slate-100 dark:border-purple-800/40" style={{ top: `${h * 56}px`, height: '56px' }}></div>
+                        ))}
+                        {isToday && (
+                          <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top: `${currentHourDecimal * 56}px` }}>
+                            <div className="h-0.5 bg-red-400/70"></div>
+                          </div>
+                        )}
+                        {dayEvents.map((event) => {
+                          const top = event.start * 56;
+                          const height = Math.max((event.end - event.start) * 56, 22);
+                          return (
+                            <button key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 rounded-md px-1 py-0.5 text-left overflow-hidden active:scale-95 shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${top}px`, height: `${height}px` }}>
+                              <div className="text-[8px] font-bold opacity-70 leading-none">{decimalToTime(event.start)}</div>
+                              <div className="text-[9px] font-bold leading-tight break-words">{event.title}</div>
+                              <div className="text-[8px] font-bold opacity-70 leading-none">{decimalToTime(event.end)}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
