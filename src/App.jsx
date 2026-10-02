@@ -9,7 +9,7 @@ ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tool
 
 export default function App() {
   const {
-    activeTab, setActiveTab, selectedDay, setSelectedDay, showStats, setShowStats,
+    activeTab, setActiveTab, showStats, setShowStats,
     showSettings, setShowSettings, showOnboarding, onboardingFade, showPolicy, setShowPolicy,
     showDday, setShowDday, serverUrlInput, setServerUrlInput, currentServerBase, saveServerUrl,
     showSplash, splashFade, videoRef, finishSplash, exitToast, themeColor,
@@ -40,7 +40,7 @@ export default function App() {
     currentWeek, addWeeklyGoal, toggleWeeklyGoal, deleteWeeklyGoal, saveWeeklyReview, startEditReview,
     weekLabel, addRequest, toggleRequestVote, deleteRequest, exportData, importData,
     notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo,
-    currentHourDecimal, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
+    currentHourDecimal, decimalToTime, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
     formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, renderSlotFill,
     renderHeader, todayRecords, getTotalStudySeconds, getComparedToYesterday, getTodoCompletionRate, handleShare,
     doughnutData, barData, captureAndShare,
@@ -198,43 +198,28 @@ export default function App() {
         {/* ======================= 시간표 화면 ======================= */}
         {activeTab === 'timetable' && (
           <div className="flex flex-col flex-1 min-h-0">
-            {renderHeader('주간 시간표', `${DAY_LABELS[selectedDay]}요일`)}
-            {/* 요일 선택 네비게이션 (일~토) */}
-            <div className="px-4 pt-3 pb-1 flex gap-1 bg-white dark:bg-purple-900">
-              {DAY_LABELS.map((dow, i) => {
-                const isSel = i === selectedDay;
-                const isToday = i === new Date().getDay();
-                return (
-                  <button key={i} onClick={() => setSelectedDay(i)} className={`flex-1 flex flex-col items-center py-2 rounded-xl transition ${isSel ? 'bg-indigo-500 text-white shadow' : 'hover:bg-slate-100 dark:hover:bg-purple-800'}`}>
-                    <span className={`text-[10px] font-bold ${isSel ? 'text-indigo-100' : 'text-slate-400 dark:text-purple-300'}`}>{isToday ? '오늘' : '요일'}</span>
-                    <span className={`text-sm font-black ${isSel ? '' : (isToday ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100')}`}>{dow}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="relative px-4 py-6 flex-1 overflow-y-auto">
-              <div className="absolute inset-0 flex">
-                <div className="w-16"></div>
-                <div className="flex-1 border-l border-slate-100 dark:border-purple-800 relative">
-                  {Array.from({ length: 24 }).map((_, i) => ( <div key={i} className="h-16 border-b border-slate-100 dark:border-purple-800/50 w-full" /> ))}
-                </div>
-              </div>
-              <div className="relative h-[1536px]">
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <div key={i} className="absolute w-full flex items-start" style={{ top: `${i * 4}rem`, marginTop: '-0.6rem' }}>
-                    <span className="text-xs font-bold text-slate-400 dark:text-purple-300 w-12 text-right pr-3">{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</span>
-                  </div>
-                ))}
-                <div className="absolute top-0 left-16 right-2 bottom-0">
-                  {events.filter((event) => event.day === selectedDay).map((event) => (
-                    <div key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 p-3 rounded-2xl backdrop-blur-sm transition-all hover:scale-[1.02] shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${event.start * 4}rem`, height: `${(event.end - event.start) * 4}rem` }}>
-                      <h3 className="font-bold text-[14px] leading-tight overflow-hidden text-ellipsis">{event.title}</h3>
+            {renderHeader('주간 시간표', '일~토 요일별')}
+            {/* 주간 그리드: 7개 요일이 한 화면에 나란히 표시 */}
+            <div className="flex-1 overflow-y-auto p-2">
+              <div className="grid grid-cols-7 gap-1">
+                {DAY_LABELS.map((dow, i) => {
+                  const isToday = i === new Date().getDay();
+                  const dayEvents = events.filter((e) => e.day === i).sort((a, b) => a.start - b.start);
+                  return (
+                    <div key={i} className="flex flex-col gap-1">
+                      <div className={`text-center py-1.5 rounded-lg text-xs font-black ${isToday ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{dow}</div>
+                      {dayEvents.map((event) => (
+                        <button key={event.id} onClick={() => openModal(event)} className={`rounded-lg px-1.5 py-2 text-left transition hover:scale-[1.03] shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`}>
+                          <div className="text-[9px] font-bold opacity-70 leading-none">{decimalToTime(event.start)}</div>
+                          <div className="text-[11px] font-bold leading-tight mt-0.5 break-words">{event.title}</div>
+                        </button>
+                      ))}
+                      {dayEvents.length === 0 && (
+                        <button onClick={() => openModal()} className="rounded-lg py-3 text-[10px] font-bold text-slate-300 dark:text-purple-500 border border-dashed border-slate-200 dark:border-purple-700">+</button>
+                      )}
                     </div>
-                  ))}
-                  <div className="absolute left-0 right-0 z-10 flex items-center -ml-2 transition-all duration-1000" style={{ top: `${currentHourDecimal * 4}rem` }}>
-                    <div className="w-2 h-2 rounded-full bg-red-500"></div><div className="h-0.5 bg-red-500/50 flex-1 shadow-sm"></div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
             </div>
           </div>
