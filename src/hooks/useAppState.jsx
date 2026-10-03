@@ -1180,7 +1180,7 @@ export function useAppState() {
 
   const openModal = (event = null) => {
     if (event) {
-      setEditingEvent(event); setFormTitle(event.title); setFormStart(decimalToTime(event.start)); setFormEnd(decimalToTime(event.end)); setFormColor(event.color); setFormDay(typeof event.day === 'number' ? event.day : selectedDay);
+      setEditingEvent(event); setFormTitle(event.title); setFormStart(decimalToTime(event.start)); setFormEnd(decimalToTime(event.end % 24)); setFormColor(event.color); setFormDay(typeof event.day === 'number' ? event.day : selectedDay);
     } else {
       setEditingEvent(null); setFormTitle(''); setFormStart('09:00'); setFormEnd('10:00'); setFormColor(COLOR_OPTIONS[0].value); setFormDay(selectedDay);
     }
@@ -1188,7 +1188,8 @@ export function useAppState() {
   };
 
   const saveEvent = () => {
-    const startDec = timeToDecimal(formStart); const endDec = timeToDecimal(formEnd);
+    const startDec = timeToDecimal(formStart); let endDec = timeToDecimal(formEnd);
+    if (endDec === 0) endDec = 24; // 종료 00:00 = 자정(24시)까지로 인식
     if (startDec >= endDec) return alert('종료 시간은 시작 시간보다 늦어야 합니다.');
     if (editingEvent) setEvents(events.map(e => e.id === editingEvent.id ? { ...e, title: formTitle, start: startDec, end: endDec, color: formColor, day: formDay } : e));
     else setEvents([...events, { id: Date.now(), title: formTitle || '새 일정', start: startDec, end: endDec, color: formColor, day: formDay }]);
