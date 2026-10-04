@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, Plus, BarChart2, Settings, Bell } from 'lucide-react';
+import { Plus, BarChart2, Settings, Bell } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -251,6 +251,8 @@ export function useAppState() {
     }
   };
 
+// 마운트 시 1회성 데이터 로딩 — SPA 표준 패턴이므로 의도적 예외 처리
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRankings(); }, []);
 
   // 내 점수 업로드 (닉네임#코드 기반)
@@ -301,7 +303,7 @@ export function useAppState() {
   const [adminTokenInput, setAdminTokenInput] = useState('');
 
   // 닉네임 허용 문자: 영어 + 한글 + 한자 + 히라가나 + 특수문자
-  const NICKNAME_PATTERN = /^[A-Za-z가-힣一-龯ぁ-ん!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~` ]+$/;
+  const NICKNAME_PATTERN = /^[A-Za-z가-힣一-龯ぁ-ん!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~` ]+$/;
 
   // ---- 관리자 로그인/로그아웃 ----
   const verifyAdmin = async () => {
@@ -415,6 +417,9 @@ export function useAppState() {
     } catch (e) { console.error(e); }
   };
 
+// 마운트/로그인 변경 시 친구 목록 로딩 — 의도적 예외 처리
+  // (fetchFriends는 매 렌더 새로 생성되므로 deps에 넣으면 무한 루프)
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { fetchFriends(); }, [currentUser]);
 
   // ---- 친구 요청 보내기 ----
@@ -477,6 +482,8 @@ export function useAppState() {
     } catch (e) { console.error(e); }
   };
 
+// 마운트 시 1회성 데이터 로딩 — SPA 표준 패턴이므로 의도적 예외 처리
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAnnouncements(); }, []);
 
   // ---- 공지 등록 (관리자만) ----
@@ -545,6 +552,8 @@ export function useAppState() {
     }
   };
 
+// 마운트 시 1회성 데이터 로딩 — SPA 표준 패턴이므로 의도적 예외 처리
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRequests(); }, []);
 
 
@@ -628,7 +637,7 @@ export function useAppState() {
       gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
       osc.start(); osc.stop(ctx.currentTime + 0.7);
-    } catch (e) { /* 오디오 미지원 시 조용히 무시 */ }
+    } catch { /* 오디오 미지원 시 조용히 무시 */ }
   };
 
   // 뽀모도로 카운트다운 (집중 25분 / 휴식 5분 자동 전환)
@@ -680,7 +689,7 @@ export function useAppState() {
 
   const stopNoise = () => {
     if (noiseCtxRef.current) {
-      try { noiseCtxRef.current.close(); } catch (e) {}
+      try { noiseCtxRef.current.close(); } catch { /* 이미 닫힌 경우 무시 */ }
       noiseCtxRef.current = null;
       noiseNodesRef.current = null;
     }
@@ -1096,7 +1105,7 @@ export function useAppState() {
           if (data.studyRecords) setStudyRecords(data.studyRecords.map(r => ({ ...r, startTime: new Date(r.startTime), endTime: new Date(r.endTime) })));
           if (data.dday) setDday(data.dday);
           alert('백업 데이터를 성공적으로 불러왔습니다! ✅');
-        } catch (err) {
+        } catch {
           alert('올바른 백업 파일이 아닙니다.');
         }
       };
@@ -1123,9 +1132,9 @@ export function useAppState() {
         new Notification('🌤️ 모두의 하루', { body: '알림이 활성화되었습니다!' });
       } else if (perm === 'denied') {
         // 사용자가 거부한 경우, 브라우저 설정 안내
-        alert('알림이 브라우저에서 차단되어 있습니다.\n브라우저 주소창 왼쪽의 자물쇠(🔒) 아이콘을 눌러 \"알림\" 권한을 허용으로 바꿔주세요.');
+        alert('알림이 브라우저에서 차단되어 있습니다.\n브라우저 주소창 왼쪽의 자물쇠(🔒) 아이콘을 눌러 "알림" 권한을 허용으로 바꿔주세요.');
       }
-    } catch (e) {
+    } catch {
       alert('알림 권한을 요청할 수 없습니다. 브라우저 설정에서 직접 허용해 주세요.');
     }
   };
@@ -1136,11 +1145,6 @@ export function useAppState() {
     }
   };
 
-  useEffect(() => {
-    if (localStorage.getItem('lifestyle_notif_enabled') === 'true' && 'Notification' in window && Notification.permission === 'granted') {
-      setNotifEnabled(true);
-    }
-  }, []);
 
   useEffect(() => {
     if (notifEnabled) localStorage.setItem('lifestyle_notif_enabled', 'true');
@@ -1290,9 +1294,6 @@ export function useAppState() {
           {hasNewNotif && (
             <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-purple-800"></span>
           )}
-        </button>
-        <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
-          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
         <button onClick={() => setShowSettings(true)} className="p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
           <Settings size={20} />
