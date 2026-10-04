@@ -1,7 +1,7 @@
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Timer as TimerIcon } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
@@ -39,12 +39,37 @@ export default function App() {
     incGoal, deleteGoal, MOODS, saveDiary, todayDiary, startEditDiary,
     currentWeek, addWeeklyGoal, toggleWeeklyGoal, deleteWeeklyGoal, saveWeeklyReview, startEditReview,
     weekLabel, addRequest, toggleRequestVote, deleteRequest, exportData, importData,
-    notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo,
+    notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo, isDarkMode, setIsDarkMode, currentTime,
     currentHourDecimal, decimalToTime, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
-    formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, renderSlotFill,
+    formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, timerStartTime,
     renderHeader, todayRecords, getTotalStudySeconds, getComparedToYesterday, getTodoCompletionRate, handleShare,
     doughnutData, barData, captureAndShare,
   } = useAppState();
+
+  // 시간표 표시 범위: 일정이 있는 시간대 ±1시간 (일정 없으면 06:00~24:00)
+  const ttRange = (() => {
+    if (!events.length) return { start: 6, end: 24 };
+    const s = Math.max(0, Math.floor(Math.min(...events.map(e => e.start))) - 1);
+    const e = Math.min(24, Math.ceil(Math.max(...events.map(e => e.end))) + 1);
+    return { start: s, end: Math.max(e, s + 4) };
+  })();
+  const ttHours = ttRange.end - ttRange.start;
+
+  // 오늘의 기록 요약 바: 해당 시간에 활동이 있으면 색상 클래스 반환
+  const hourActivity = (h) => {
+    const now = new Date();
+    const hs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, 0, 0).getTime();
+    const he = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h + 1, 0, 0).getTime();
+    const rec = todayRecords.find(r => r.startTime.getTime() < he && r.endTime.getTime() > hs);
+    if (rec) return rec.color;
+    if (timerStartTime) {
+      const rs = timerStartTime.getTime();
+      const re = isTimerRunning ? currentTime.getTime() : rs + timerSeconds * 1000;
+      if (rs < he && re > hs) return timerColor;
+    }
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-purple-950 text-slate-800 dark:text-purple-50 transition-colors duration-300">
       <div className="max-w-md mx-auto h-screen bg-white dark:bg-purple-900 shadow-sm relative overflow-hidden flex flex-col pt-safe main-content-pad">
@@ -69,7 +94,7 @@ export default function App() {
 
         {/* ======================= 로그인/가입 화면 ======================= */}
         {!currentUser && (
-          <div className="absolute inset-0 z-[95] flex flex-col justify-center bg-slate-50 dark:bg-[#09090b] p-6 overflow-y-auto">
+          <div className="absolute inset-0 z-[95] flex flex-col justify-center bg-slate-50 dark:bg-purple-950 p-6 overflow-y-auto">
             <div className="flex flex-col items-center mb-8">
               <div className="text-5xl mb-3">🌤️</div>
               <h1 className="text-3xl font-black tracking-tight">모두의 하루</h1>
@@ -77,7 +102,7 @@ export default function App() {
             </div>
 
             {/* 로그인/가입 토글 */}
-            <div className="flex gap-2 bg-white dark:bg-[#18181b] rounded-2xl p-1.5 border border-slate-100 dark:border-[#27272a] mb-6">
+            <div className="flex gap-2 bg-white dark:bg-purple-900 rounded-2xl p-1.5 border border-slate-100 dark:border-purple-800 mb-6">
               <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${authMode === 'login' ? 'bg-indigo-500 text-white shadow' : 'text-slate-500 dark:text-purple-300'}`}>로그인</button>
               <button onClick={() => { setAuthMode('signup'); setAuthError(''); }} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${authMode === 'signup' ? 'bg-indigo-500 text-white shadow' : 'text-slate-500 dark:text-purple-300'}`}>가입</button>
             </div>
@@ -86,36 +111,35 @@ export default function App() {
               <form onSubmit={handleLogin} className="flex flex-col gap-3">
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">아이디</label>
-                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호</label>
-                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="current-password" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="current-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
                 <button type="submit" disabled={authBusy} className="w-full bg-indigo-500 text-white rounded-xl font-bold py-3.5 hover:opacity-90 transition shadow-md disabled:opacity-50 mt-1">
                   {authBusy ? '로그인 중...' : '로그인'}
                 </button>
-                <p className="text-center text-[11px] text-slate-400 dark:text-purple-400 font-bold">아이디/비밀번호 찾기는 곧 추가될 예정이에요</p>
               </form>
             ) : (
               <form onSubmit={handleSignup} className="flex flex-col gap-3">
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">아이디 <span className="text-slate-400">(영어·숫자 4자 이상)</span></label>
-                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">닉네임 <span className="text-slate-400">(영어·한글·한자·히라가나·특수문자)</span></label>
-                  <input type="text" value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} placeholder="예: 하루몽, はる, 太郎" maxLength={12} className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="text" value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} placeholder="예: 하루몽, はる, 太郎" maxLength={12} className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-1">가입하면 닉네임#0000 형식의 고유 코드가 자동 부여돼요</p>
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 <span className="text-slate-400">(6자 이상)</span></label>
-                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 확인</label>
-                  <input type="password" value={authPasswordConfirm} onChange={(e) => setAuthPasswordConfirm(e.target.value)} placeholder="비밀번호를 다시 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="password" value={authPasswordConfirm} onChange={(e) => setAuthPasswordConfirm(e.target.value)} placeholder="비밀번호를 다시 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
                 <button type="submit" disabled={authBusy} className="w-full bg-indigo-500 text-white rounded-xl font-bold py-3.5 hover:opacity-90 transition shadow-md disabled:opacity-50 mt-1">
@@ -166,7 +190,7 @@ export default function App() {
                             <span className="font-bold text-slate-800 dark:text-purple-50 truncate">{todo.text}</span>
                           </div>
                         </div>
-                        <button onClick={() => deleteTodo(todo.id)} className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
+                        <button onClick={() => deleteTodo(todo.id)} className="opacity-50 hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
                       </div>
                     ))
                   )}
@@ -185,7 +209,7 @@ export default function App() {
                           <span className="font-bold text-slate-500 dark:text-purple-300/70 line-through truncate">{todo.text}</span>
                         </div>
                       </div>
-                      <button onClick={() => deleteTodo(todo.id)} className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
+                      <button onClick={() => deleteTodo(todo.id)} className="opacity-50 hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
                     </div>
                   ))}
                 </div>
@@ -211,14 +235,14 @@ export default function App() {
                 })}
               </div>
             </div>
-            {/* 시간 그리드 (00:00 ~ 24:00) */}
+            {/* 시간 그리드 (일정 있는 시간대만 표시) */}
             <div className="flex-1 overflow-y-auto px-2 pt-3 pb-4">
               <div className="flex">
                 {/* 시간축 라벨 */}
-                <div className="w-10 shrink-0 relative" style={{ height: `${24 * 56}px` }}>
-                  {Array.from({ length: 25 }).map((_, i) => (
+                <div className="w-10 shrink-0 relative" style={{ height: `${ttHours * 56}px` }}>
+                  {Array.from({ length: ttHours + 1 }).map((_, i) => (
                     <div key={i} className="absolute right-1 -translate-y-1/2" style={{ top: `${i * 56}px` }}>
-                      <span className="text-[8px] font-bold text-slate-400 dark:text-purple-300">{String(i).padStart(2, '0')}:00</span>
+                      <span className="text-[8px] font-bold text-slate-400 dark:text-purple-300">{String(ttRange.start + i).padStart(2, '0')}:00</span>
                     </div>
                   ))}
                 </div>
@@ -228,23 +252,23 @@ export default function App() {
                     const isToday = i === new Date().getDay();
                     const dayEvents = events.filter((e) => e.day === i);
                     return (
-                      <div key={i} className="relative" style={{ height: `${24 * 56}px` }}>
-                        {Array.from({ length: 24 }).map((_, h) => (
+                      <div key={i} className="relative" style={{ height: `${ttHours * 56}px` }}>
+                        {Array.from({ length: ttHours }).map((_, h) => (
                           <div key={h} className="absolute left-0 right-0 border-b border-slate-100 dark:border-purple-800/40" style={{ top: `${h * 56}px`, height: '56px' }}></div>
                         ))}
-                        {isToday && (
-                          <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top: `${currentHourDecimal * 56}px` }}>
+                        {isToday && currentHourDecimal >= ttRange.start && currentHourDecimal <= ttRange.end && (
+                          <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top: `${(currentHourDecimal - ttRange.start) * 56}px` }}>
                             <div className="h-0.5 bg-red-400/70"></div>
                           </div>
                         )}
                         {dayEvents.map((event) => {
-                          const top = event.start * 56;
+                          const top = (event.start - ttRange.start) * 56;
                           const height = Math.max((event.end - event.start) * 56, 22);
+                          const showTime = (event.end - event.start) >= 1;
                           return (
                             <button key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 rounded-md px-1 py-0.5 text-left overflow-hidden active:scale-95 shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${top}px`, height: `${height}px` }}>
-                              <div className="text-[8px] font-bold opacity-70 leading-none">{decimalToTime(event.start)}</div>
                               <div className="text-[9px] font-bold leading-tight break-words">{event.title}</div>
-                              <div className="text-[8px] font-bold opacity-70 leading-none">{decimalToTime(event.end)}</div>
+                              {showTime && <div className="text-[8px] font-bold opacity-70 leading-none mt-0.5">{decimalToTime(event.start)}-{decimalToTime(event.end)}</div>}
                             </button>
                           );
                         })}
@@ -272,7 +296,7 @@ export default function App() {
               {/* 타이머 카드 (집중 모드에서는 이것만 남김) */}
               <div className={`shrink-0 flex flex-col items-center py-8 px-4 bg-white dark:bg-purple-900 rounded-3xl shadow-sm border border-slate-100 dark:border-purple-800 relative ${isFocusMode && isTimerRunning ? 'py-16' : ''}`}>
                 {(isPomodoro && !isTimerRunning) && <div className="text-sm font-bold text-rose-500 mb-4 bg-rose-50 dark:bg-rose-900/30 px-4 py-2 rounded-full">{pomodoroPhase === 'focus' ? '25분 집중' : '5분 휴식'} 모드 🍅</div>}
-                {(!isPomodoro && !isTimerRunning && timerSeconds === 0) && ( <div className="text-sm font-bold text-slate-400 dark:text-purple-300/70 mb-4 bg-slate-50 dark:bg-purple-800/30 px-4 py-2 rounded-full"> 측정할 카테고리와 색상을 골라주세요 👇 </div> )}
+                {(!isPomodoro && !isTimerRunning && timerSeconds === 0) && ( <div className="text-sm font-bold text-slate-400 dark:text-purple-300/70 mb-4 bg-slate-50 dark:bg-purple-800/30 px-4 py-2 rounded-full"> 카테고리를 입력하세요 👇 </div> )}
                 <input type="text" value={currentStudy} onChange={(e) => setCurrentStudy(e.target.value)} placeholder="예: 리액트 공부" disabled={isTimerRunning} className="bg-transparent text-center text-xl mb-4 outline-none placeholder:text-slate-300 dark:placeholder:text-purple-300/50 border-b-2 border-slate-100 dark:border-purple-800 focus:border-slate-400 dark:focus:border-purple-500 transition-colors py-2 font-bold w-full max-w-[260px]" />
                 <div className={`flex gap-3 mb-6 transition-opacity ${isTimerRunning || isPomodoro ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                   {TIMER_COLORS.map(color => ( <button key={color} onClick={() => setTimerColor(color)} className={`w-7 h-7 rounded-full transition-all duration-200 ${color} ${timerColor === color ? 'ring-4 ring-offset-2 ring-slate-300 dark:ring-purple-400 scale-110 shadow-md' : 'opacity-60 hover:opacity-100'}`} /> ))}
@@ -316,47 +340,38 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 오늘의 기록 + 타임라인 상세 나란히 배치 (세로로 길게) */}
+              {/* 오늘의 기록: 하루 요약 바 */}
               <div className="shrink-0 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-                <div className="flex gap-4 items-stretch">
-                  {/* 왼쪽: 오늘의 기록 (시간 블록) */}
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100 flex items-center gap-1.5"><TimerIcon size={16}/> 오늘의 기록</h3>
-                    <div className="overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                      <div className="flex gap-[6px] min-w-max px-1">
-                        {Array.from({ length: 24 }).map((_, h) => (
-                          <div key={h} className="flex flex-col gap-1 items-center w-[22px]">
-                            <span className="text-[11px] text-slate-400 dark:text-purple-300/70 font-bold mb-1 tracking-tighter">{h}</span>
-                            {Array.from({ length: 6 }).map((_, m) => ( <div key={m} className="w-full h-[14px] rounded-[4px] relative overflow-hidden bg-slate-100 dark:bg-purple-800/50 shadow-sm">{renderSlotFill(h, m)}</div> ))}
-                          </div>
-                        ))}
+                <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100 flex items-center gap-1.5"><TimerIcon size={16}/> 오늘의 기록</h3>
+                <div className="flex gap-[3px]">
+                  {Array.from({ length: 24 }).map((_, h) => {
+                    const color = hourActivity(h);
+                    return <div key={h} title={`${h}시`} className={`flex-1 h-7 rounded-md ${color || 'bg-slate-100 dark:bg-purple-800/50'}`} />;
+                  })}
+                </div>
+                <div className="flex justify-between mt-1.5 text-[9px] font-bold text-slate-400 dark:text-purple-300/60">
+                  <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+                </div>
+              </div>
+
+              {/* 타임라인 */}
+              <div className="shrink-0 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
+                <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100">타임라인</h3>
+                <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
+                  {studyRecords.length === 0 ? (
+                    <div className="text-center text-slate-400 dark:text-purple-300/50 py-8 text-xs bg-slate-50 dark:bg-purple-950 rounded-xl border border-slate-100 dark:border-purple-800">아직 기록이 없어요.</div>
+                  ) : (
+                    studyRecords.map(record => (
+                      <div key={record.id} onClick={() => openTimerModal(record)} className="bg-slate-50 dark:bg-purple-950 p-3 rounded-xl border border-slate-100 dark:border-purple-800 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform flex flex-col">
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${record.color}`}></div>
+                        <div className="pl-2">
+                          <h4 className="font-bold text-[13px] text-slate-800 dark:text-purple-100 truncate">{record.title}</h4>
+                          <p className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold mt-0.5">{formatTimeHM(record.startTime)} - {formatTimeHM(record.endTime)}</p>
+                          <div className="font-mono text-[11px] font-bold text-slate-600 dark:text-purple-200 mt-1">{formatTimerDisplay(record.duration)}</div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* 세로 구분선 */}
-                  <div className="w-px bg-slate-100 dark:bg-purple-800 self-stretch shrink-0"></div>
-
-                  {/* 오른쪽: 타임라인 상세 (세로 긴 목록) */}
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100">타임라인</h3>
-                    <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
-                      {studyRecords.length === 0 ? (
-                        <div className="text-center text-slate-400 dark:text-purple-300/50 py-8 text-xs bg-slate-50 dark:bg-purple-950 rounded-xl border border-slate-100 dark:border-purple-800">아직 기록이 없어요.</div>
-                      ) : (
-                        studyRecords.map(record => (
-                          <div key={record.id} onClick={() => openTimerModal(record)} className="bg-slate-50 dark:bg-purple-950 p-3 rounded-xl border border-slate-100 dark:border-purple-800 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform flex flex-col">
-                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${record.color}`}></div>
-                            <div className="pl-2">
-                              <h4 className="font-bold text-[13px] text-slate-800 dark:text-purple-100 truncate">{record.title}</h4>
-                              <p className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold mt-0.5">{formatTimeHM(record.startTime)} - {formatTimeHM(record.endTime)}</p>
-                              <div className="font-mono text-[11px] font-bold text-slate-600 dark:text-purple-200 mt-1">{formatTimerDisplay(record.duration)}</div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -617,7 +632,7 @@ export default function App() {
                     />
                     <input type="text" value={newRequestTitle} onChange={(e) => setNewRequestTitle(e.target.value)} placeholder="제목을 입력하세요" className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   </div>
-                  <textarea value={newRequestBody} onChange={(e) => setNewRequestBody(e.target.value)} placeholder="어떤 기능이 필요하신가요? 자세히 적어주실수록 더 잘 반영할 수 있어요." rows={3} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold resize-none" />
+                  <textarea value={newRequestBody} onChange={(e) => setNewRequestBody(e.target.value)} placeholder="필요한 기능을 적어주세요." rows={3} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold resize-none" />
                   <button type="submit" disabled={!newRequestTitle.trim() || !newRequestBody.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow-md disabled:opacity-50 disabled:shadow-none">의견 보내기</button>
                 </form>
               </div>
@@ -662,14 +677,17 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
 
+        {/* ======================= 랭킹 탭 ======================= */}
+        {activeTab === 'ranking' && (
+          <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
+            {renderHeader('친구 랭킹', `내 점수 ${calcMyScore()}점`)}
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
               {/* ===== 친구와 경쟁 (랭킹) ===== */}
               <div className="shrink-0 mb-4 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-sm text-slate-700 dark:text-purple-100 flex items-center gap-1.5">👥 친구와 경쟁</h3>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-purple-300">내 점수 {calcMyScore()}점</span>
-                </div>
-
                 {!currentUser ? (
                   <div className="text-center text-slate-400 dark:text-purple-300/70 py-8 text-sm">
                     <div className="text-3xl mb-2">🔒</div>
@@ -727,7 +745,6 @@ export default function App() {
                   </>
                 )}
               </div>
-
             </div>
           </div>
         )}
@@ -892,6 +909,11 @@ export default function App() {
             <span className="text-[10px] font-bold">기록</span>
           </button>
 
+          <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+            <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+            <span className="text-[10px] font-bold">랭킹</span>
+          </button>
+
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <MessageSquare size={24} className={activeTab === 'requests' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">요청</span>
@@ -976,16 +998,15 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 서버 주소 설정 */}
-                <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
-                  <div className="flex items-center gap-2 mb-2 font-bold text-slate-700 dark:text-purple-200"><Server size={18} className="text-sky-500"/> 서버 주소</div>
-                  <p className="text-xs text-slate-500 dark:text-purple-300/70 mb-3 font-bold">PC의 IP를 입력하세요. 와이파이/핫스팟이 바뀌면 여기서 수정하면 돼요.</p>
-                  <div className="flex gap-2">
-                    <input type="text" value={serverUrlInput} onChange={(e) => setServerUrlInput(e.target.value)} placeholder="예: 10.60.30.134:3001" className="flex-1 min-w-0 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                {/* 서버 주소 설정 (고급) */}
+                <details className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
+                  <summary className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200 cursor-pointer list-none"><Server size={18} className="text-sky-500"/> 서버 주소 <span className="text-[10px] font-bold text-slate-400 ml-auto">고급</span></summary>
+                  <div className="flex gap-2 mt-3">
+                    <input type="text" value={serverUrlInput} onChange={(e) => setServerUrlInput(e.target.value)} placeholder="예: 10.60.30.134:3001" className="flex-1 min-w-0 bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                     <button onClick={saveServerUrl} className="shrink-0 px-3 py-2 rounded-xl bg-sky-500 text-white text-sm font-bold hover:opacity-90 transition">저장</button>
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-2">현재: {currentServerBase}</p>
-                </div>
+                </details>
 
                 {/* 관리자 모드 */}
                 <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
@@ -997,11 +1018,20 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <input type="password" value={adminTokenInput} onChange={(e) => setAdminTokenInput(e.target.value)} placeholder="관리자 토큰" className="flex-1 min-w-0 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                      <input type="password" value={adminTokenInput} onChange={(e) => setAdminTokenInput(e.target.value)} placeholder="관리자 토큰" className="flex-1 min-w-0 bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                       <button onClick={verifyAdmin} className="shrink-0 px-3 py-2 rounded-xl bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 text-sm font-bold hover:opacity-90 transition">인증</button>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-2"></p>
+                </div>
+
+                {/* 다크 모드 */}
+                <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200">{isDarkMode ? <Moon size={18} className="text-indigo-500"/> : <Sun size={18} className="text-amber-500"/>} 다크 모드</div>
+                    <button onClick={() => setIsDarkMode(!isDarkMode)} className={`w-12 h-7 rounded-full transition-colors relative ${isDarkMode ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-purple-800'}`}>
+                      <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${isDarkMode ? 'left-6' : 'left-1'}`} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* 테마 색상 커스텀 */}
@@ -1072,7 +1102,7 @@ export default function App() {
                         { label: '시간', value: getDdayCountdown().hours },
                         { label: '분', value: getDdayCountdown().mins },
                         { label: '초', value: getDdayCountdown().secs },
-                      ].map((u, i) => (
+                      ].map((u) => (
                         <div key={u.label} className="flex flex-col items-center">
                           <div className="w-16 h-16 bg-slate-900 dark:bg-purple-800 rounded-2xl flex items-center justify-center text-white dark:text-purple-100 text-2xl font-black font-mono tabular-nums shadow-lg">
                             {String(u.value).padStart(2, '0')}
@@ -1081,7 +1111,6 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs text-slate-400 dark:text-purple-300/70 font-bold mt-6">매분 갱신되고 있어요 ⏱️</p>
                   </>
                 ) : (
                   <div className="py-6">
