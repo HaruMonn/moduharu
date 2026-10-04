@@ -71,7 +71,7 @@ app.get('/api/requests', async (req, res) => {
     const record = await readBin(REQUESTS_BIN);
     const items = (record.items || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json({ items });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '의견을 불러오지 못했어요.' });
   }
 });
@@ -94,7 +94,7 @@ app.post('/api/requests', async (req, res) => {
     items.unshift(newItem);
     await writeBin(REQUESTS_BIN, { ...record, items });
     res.json({ items: items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '의견 등록에 실패했어요.' });
   }
 });
@@ -109,7 +109,7 @@ app.post('/api/requests/:id/vote', async (req, res) => {
     );
     await writeBin(REQUESTS_BIN, { ...record, items });
     res.json({ items: items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '추천 반영에 실패했어요.' });
   }
 });
@@ -121,7 +121,7 @@ app.delete('/api/requests/:id', requireAdmin, async (req, res) => {
     const items = (record.items || []).filter((r) => r.id !== id);
     await writeBin(REQUESTS_BIN, { ...record, items });
     res.json({ items: items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '의견 삭제에 실패했어요.' });
   }
 });
@@ -132,7 +132,7 @@ app.get('/api/rankings', async (req, res) => {
     const record = await readBin(RANKINGS_BIN);
     const scores = (record.scores || []).sort((a, b) => b.score - a.score);
     res.json({ scores });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '랭킹을 불러오지 못했어요.' });
   }
 });
@@ -146,7 +146,7 @@ app.post('/api/rankings', async (req, res) => {
     scores.push({ nick, score: Number(score) || 0, updatedAt: new Date().toISOString() });
     await writeBin(RANKINGS_BIN, { ...record, scores });
     res.json({ scores: scores.sort((a, b) => b.score - a.score) });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '점수 등록에 실패했어요.' });
   }
 });
@@ -168,7 +168,7 @@ app.post('/api/users/signup', async (req, res) => {
     users.push(newUser);
     await writeBin(USERS_BIN, { ...record, users });
     res.json({ user: newUser });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '가입 저장에 실패했어요.' });
   }
 });
@@ -183,7 +183,7 @@ app.post('/api/users/login', async (req, res) => {
       return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않아요.' });
     }
     res.json({ user: found });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '로그인에 실패했어요.' });
   }
 });
@@ -198,7 +198,7 @@ app.get('/api/users/lookup', async (req, res) => {
     const found = users.find((u) => u.code === code);
     if (!found) return res.status(404).json({ error: '사용자를 찾을 수 없어요.' });
     res.json({ user: { nickname: found.nickname, code: found.code } });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '사용자 조회에 실패했어요.' });
   }
 });
@@ -225,7 +225,7 @@ app.get('/api/friends', async (req, res) => {
       return { fromCode: r.fromCode, fromNickname: from ? from.nickname : r.fromCode, at: r.at };
     });
     res.json({ friends, requests });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '친구 목록을 불러오지 못했어요.' });
   }
 });
@@ -273,7 +273,7 @@ app.post('/api/friends/request', async (req, res) => {
     });
     await writeBin(USERS_BIN, { ...record, users: updated });
     res.json({ ok: true });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '친구 요청에 실패했어요.' });
   }
 });
@@ -296,7 +296,7 @@ app.post('/api/friends/accept', async (req, res) => {
     });
     await writeBin(USERS_BIN, { ...record, users: updated });
     res.json({ ok: true });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '친구 수락에 실패했어요.' });
   }
 });
@@ -316,7 +316,7 @@ app.post('/api/friends/reject', async (req, res) => {
     });
     await writeBin(USERS_BIN, { ...record, users: updated });
     res.json({ ok: true });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '친구 요청 거절에 실패했어요.' });
   }
 });
@@ -327,7 +327,7 @@ app.get('/api/announcements', async (req, res) => {
     const record = await readBin(REQUESTS_BIN);
     const announcements = (record.announcements || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json({ announcements });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '공지를 불러오지 못했어요.' });
   }
 });
@@ -346,7 +346,7 @@ app.post('/api/announcements', requireAdmin, async (req, res) => {
     });
     await writeBin(REQUESTS_BIN, { ...record, announcements });
     res.json({ announcements: announcements.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '공지 등록에 실패했어요.' });
   }
 });
@@ -358,7 +358,7 @@ app.delete('/api/announcements/:id', requireAdmin, async (req, res) => {
     const announcements = (record.announcements || []).filter((a) => a.id !== id);
     await writeBin(REQUESTS_BIN, { ...record, announcements });
     res.json({ announcements: announcements.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '공지 삭제에 실패했어요.' });
   }
 });
@@ -375,7 +375,7 @@ app.post('/api/users/lookup-batch', async (req, res) => {
       if (codes.includes(u.code)) map[u.code] = u.nickname;
     });
     res.json({ map });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: '사용자 조회에 실패했어요.' });
   }
 });
