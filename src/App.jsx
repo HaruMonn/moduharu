@@ -18,13 +18,13 @@ export default function App() {
     editingDiary, newWeeklyGoal, setNewWeeklyGoal, weeklyReviewGood, setWeeklyReviewGood, weeklyReviewBad,
     setWeeklyReviewBad, weeklyReviewNext, setWeeklyReviewNext, editingReview, requests, requestsLoading,
     requestsError, newRequestTitle, setNewRequestTitle, newRequestBody, setNewRequestBody, newRequestCategory,
-    setNewRequestCategory, rankings, rankingLoading, rankingReady, calcMyScore, submitMyScore,
+    setNewRequestCategory, rankings, rankingLoading, rankingReady, rankingFilter, setRankingFilter, calcMyScore, submitMyScore,
     currentUser, authMode, setAuthMode, authId, setAuthId, authPassword,
     setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, authError,
     setAuthError, authBusy, friends, friendRequests, friendCodeInput, setFriendCodeInput,
     announcements, showNotif, setShowNotif, announceTitle, setAnnounceTitle, announceBody,
     setAnnounceBody, isAdmin, adminTokenInput, setAdminTokenInput, verifyAdmin, logoutAdmin,
-    handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend,
+    handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend, removeFriend,
     addAnnouncement, deleteAnnouncement, newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
     setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
@@ -719,19 +719,28 @@ export default function App() {
                     {friends.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-4">
                         {friends.map(f => (
-                          <span key={f.code} className="text-[11px] font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300 px-2.5 py-1 rounded-full border border-sky-100 dark:border-sky-800">{f.nickname}<span className="text-sky-400">#{f.code}</span></span>
+                          <span key={f.code} className="inline-flex items-center gap-1 text-[11px] font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300 pl-2.5 pr-1 py-1 rounded-full border border-sky-100 dark:border-sky-800">{f.nickname}<span className="text-sky-400">#{f.code}</span><button onClick={() => removeFriend(f.code)} className="p-0.5 rounded-full hover:bg-sky-100 dark:hover:bg-sky-800" aria-label={`${f.nickname} 삭제`}><X size={12} /></button></span>
                         ))}
                       </div>
                     )}
+
+                    {/* 랭킹 필터 */}
+                    <div className="flex gap-1.5 mb-3">
+                      {[{ v: 'all', label: '🌍 전체' }, { v: 'friends', label: '👥 친구만' }].map(o => (
+                        <button key={o.v} onClick={() => setRankingFilter(o.v)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${rankingFilter === o.v ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{o.label}</button>
+                      ))}
+                    </div>
 
                     {/* 랭킹 보드 */}
                     <div className="space-y-2">
                       {rankingLoading ? (
                         <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">순위 불러오는 중... ⏳</div>
-                      ) : rankings.length === 0 ? (
-                        <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">아직 등록된 점수가 없어요.<br/>첫 번째로 도전해보세요! 💪</div>
-                      ) : (
-                        rankings.slice(0, 20).map((r, i) => (
+                      ) : (() => {
+                        const friendNicks = new Set(friends.map(f => `${f.nickname}#${f.code}`));
+                        const myNick = currentUser ? `${currentUser.nickname}#${currentUser.code}` : '';
+                        const visible = (rankingFilter === 'friends' ? rankings.filter(r => r.nick === myNick || friendNicks.has(r.nick)) : rankings).slice(0, 20);
+                        if (visible.length === 0) return <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">{rankingFilter === 'friends' ? '친구 중 등록된 점수가 없어요.<br/>친구를 추가하고 점수를 등록해보세요! 🤝' : '아직 등록된 점수가 없어요.<br/>첫 번째로 도전해보세요! 💪'}</div>;
+                        return visible.map((r, i) => (
                           <div key={r.nick + i} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : 'bg-slate-50 dark:bg-purple-950 border border-slate-100 dark:border-purple-800'}`}>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-200 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>
                               {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
@@ -739,8 +748,8 @@ export default function App() {
                             <span className={`flex-1 font-bold text-sm truncate ${r.nick === `${currentUser.nickname}#${currentUser.code}` ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100'}`}>{r.nick}{r.nick === `${currentUser.nickname}#${currentUser.code}` ? ' (나)' : ''}</span>
                             <span className="font-mono font-black text-sm text-slate-600 dark:text-purple-200">{r.score}점</span>
                           </div>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </div>
                   </>
                 )}
@@ -1101,7 +1110,6 @@ export default function App() {
                         { label: '일', value: getDdayCountdown().days },
                         { label: '시간', value: getDdayCountdown().hours },
                         { label: '분', value: getDdayCountdown().mins },
-                        { label: '초', value: getDdayCountdown().secs },
                       ].map((u) => (
                         <div key={u.label} className="flex flex-col items-center">
                           <div className="w-16 h-16 bg-slate-900 dark:bg-purple-800 rounded-2xl flex items-center justify-center text-white dark:text-purple-100 text-2xl font-black font-mono tabular-nums shadow-lg">
@@ -1135,11 +1143,11 @@ export default function App() {
               <div className="space-y-4 text-sm text-slate-600 dark:text-purple-300 leading-relaxed">
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">1. 개인정보 수집 및 이용</h3>
-                  <p>본 앱은 회원가입이나 개인정보 수집을 하지 않습니다. 모든 데이터(할 일, 시간표, 타이머 기록)는 사용자의 기기 내부(브라우저 로컬 스토리지)에만 저장되며, 외부 서버로 전송되지 않습니다.</p>
+                  <p>회원가입 시 아이디, 비밀번호(암호화되어 저장됩니다), 닉네임을 수집합니다. 친구 코드, 친구 목록, 랭킹 점수, 의견 게시글은 서비스 제공을 위해 서버에 저장됩니다. 할 일, 시간표, 타이머 기록 등 개인 기록은 기본적으로 사용자의 기기 내부(로컬 스토리지)에만 저장되며 서버로 전송되지 않습니다.</p>
                 </section>
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">2. 데이터 보관 및 삭제</h3>
-                  <p>사용자가 앱을 삭제하거나 브라우저 데이터를 삭제하면 모든 기록이 함께 삭제됩니다. 백업 기능을 통해 언제든지 데이터를 내보내거나 복원할 수 있습니다.</p>
+                  <p>기기 내부 데이터는 앱을 삭제하거나 브라우저 데이터를 삭제하면 함께 삭제됩니다. 백업 기능을 통해 언제든지 데이터를 내보내거나 복원할 수 있습니다. 서버에 저장된 계정·친구·랭킹 데이터의 삭제를 원하시면 앱 설정의 문의 채널을 통해 요청할 수 있습니다.</p>
                 </section>
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">3. 알림 권한</h3>
@@ -1195,7 +1203,7 @@ export default function App() {
                 </div>
                 <div><label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">테마 색상</label><div className="flex gap-3">{COLOR_OPTIONS.map(opt => ( <button key={opt.value} onClick={() => setFormColor(opt.value)} className={`w-10 h-10 rounded-full transition-all duration-200 ${opt.value.split(' ')[0]} ${formColor === opt.value ? 'ring-2 ring-offset-2 ring-slate-400 dark:ring-purple-400 scale-110 shadow-md' : 'opacity-80 hover:opacity-100 hover:scale-105'}`} /> ))}</div></div>
               </div>
-              <div className="mt-8 flex gap-3"><button onClick={deleteEvent} className="p-4 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 transition"><Trash2 size={20} /></button><button onClick={saveEvent} className="flex-1 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-4 hover:opacity-90 transition shadow-md">저장하기</button></div>
+              <div className="mt-8 flex gap-3">{editingEvent && (<button onClick={deleteEvent} className="p-4 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 transition"><Trash2 size={20} /></button>)}<button onClick={saveEvent} className="flex-1 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-4 hover:opacity-90 transition shadow-md">저장하기</button></div>
             </div>
           </div>
         )}
