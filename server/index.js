@@ -175,16 +175,49 @@ app.get('/api/rankings', async (req, res) => {
 
 app.post('/api/rankings', async (req, res) => {
   try {
-    const { nick, score } = req.body || {};
+    const { nick, records } = req.body || {};
     // 닉네임: 필수 문자열, 50자로 제한
     const cleanNick = typeof nick === 'string' ? nick.trim().slice(0, 50) : '';
     if (!cleanNick) return res.status(400).json({ error: '닉네임이 필요해요.' });
-    // 점수: 0 이상의 정수만 허용 (음수·NaN·문자열 거부, 소수점은 버림)
-    const numScore = typeof score === 'number' && Number.isFinite(score) ? Math.floor(score) : NaN;
-    if (Number.isNaN(numScore) || numScore < 0) return res.status(400).json({ error: '점수가 올바르지 않아요.' });
+    // 점수 숫자는 신뢰하지 않고, 클라이언트가 보낸 공부 기록을 직접 검증·합산
+    if (!Array.isArray(records)) {
+      return res.status(400).json({ error: '공부 기록이 필요해요. 앱을 최신 버전으로 업데이트해주세요.' });
+    }
+    if (records.length > 200) return res.status(400).json({ error: '기록이 너무 많아요.' });
+
+    // 오늘 (KST 기준)
+    const kstDate = (d) => new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const todayKst = kstDate(new Date());
+    const now = Date.now();
+
+    const intervals = [];
+    for (const r of records) {
+      const start = new Date(r.startTime);
+      const end = new Date(r.endTime);
+      const dur = Number(r.duration);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) return res.status(400).json({ error: '기록 시간이 올바르지 않아요.' });
+      if (!(dur > 0) || !Number.isFinite(dur)) return res.status(400).json({ error: '기록 길이가 올바르지 않아요.' });
+      if (end <= start) return res.status(400).json({ error: '기록 시간이 올바르지 않아요.' });
+      // duration이 실제 구간과 크게 다르면 거부
+      if (Math.abs((end - start) / 1000 - dur) > 120) return res.status(400).json({ error: '기록 길이가 올바르지 않아요.' });
+      // 오늘(KST) 시작한 기록만, 미래 시간 거부
+      if (kstDate(start) !== todayKst) return res.status(400).json({ error: '오늘의 기록만 등록할 수 있어요.' });
+      if (start.getTime() > now) return res.status(400).json({ error: '미래의 기록은 등록할 수 없어요.' });
+      intervals.push({ start: start.getTime(), end: end.getTime(), dur });
+    }
+    // 겹치는 구간 거부
+    intervals.sort((a, b) => a.start - b.start);
+    for (let i = 1; i < intervals.length; i++) {
+      if (intervals[i].start < intervals[i - 1].end) {
+        return res.status(400).json({ error: '겹치는 시간대의 기록이 있어요.' });
+      }
+    }
+    const minutes = Math.round(intervals.reduce((a, r) => a + r.dur, 0) / 60);
+    if (minutes > 1440) return res.status(400).json({ error: '하루 24시간을 초과할 수 없어요.' });
+
     const record = await readBin(RANKINGS_BIN);
     let scores = (record.scores || []).filter((s) => s.nick !== cleanNick);
-    scores.push({ nick: cleanNick, score: numScore, updatedAt: new Date().toISOString() });
+    scores.push({ nick: cleanNick, score: minutes, updatedAt: new Date().toISOString() });
     await writeBin(RANKINGS_BIN, { ...record, scores });
     res.json({ scores: scores.sort((a, b) => b.score - a.score) });
   } catch {
