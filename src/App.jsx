@@ -684,7 +684,7 @@ export default function App() {
         {/* ======================= 랭킹 탭 ======================= */}
         {activeTab === 'ranking' && (
           <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
-            {renderHeader('친구 랭킹', `내 점수 ${calcMyScore()}점`)}
+            {renderHeader('친구 랭킹', `내 집중 ${calcMyScore()}분`)}
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
               {/* ===== 친구와 경쟁 (랭킹) ===== */}
               <div className="shrink-0 mb-4 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
@@ -700,13 +700,13 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {/* 내 프로필 + 점수 등록 */}
+                    {/* 내 프로필 + 기록 등록 */}
                     <div className="flex items-center gap-2 mb-3 bg-slate-50 dark:bg-purple-950 rounded-xl p-3 border border-slate-100 dark:border-purple-800">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-black text-slate-700 dark:text-purple-100 truncate">{currentUser.nickname}<span className="text-slate-400 font-bold">#{currentUser.code}</span></div>
                         <div className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold">내 고유 코드</div>
                       </div>
-                      <button onClick={submitMyScore} className="shrink-0 px-4 py-2 bg-indigo-500 text-white rounded-xl font-bold text-sm shadow hover:opacity-90 transition">점수 등록 🏆</button>
+                      <button onClick={submitMyScore} className="shrink-0 px-4 py-2 bg-indigo-500 text-white rounded-xl font-bold text-sm shadow hover:opacity-90 transition">기록 등록 🏆</button>
                     </div>
 
                     {/* 친구 추가 (코드 기반) */}
@@ -739,14 +739,14 @@ export default function App() {
                         const friendNicks = new Set(friends.map(f => `${f.nickname}#${f.code}`));
                         const myNick = currentUser ? `${currentUser.nickname}#${currentUser.code}` : '';
                         const visible = (rankingFilter === 'friends' ? rankings.filter(r => r.nick === myNick || friendNicks.has(r.nick)) : rankings).slice(0, 20);
-                        if (visible.length === 0) return <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">{rankingFilter === 'friends' ? '친구 중 등록된 점수가 없어요.<br/>친구를 추가하고 점수를 등록해보세요! 🤝' : '아직 등록된 점수가 없어요.<br/>첫 번째로 도전해보세요! 💪'}</div>;
+                        if (visible.length === 0) return <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">{rankingFilter === 'friends' ? '친구 중 등록된 기록이 없어요.<br/>친구를 추가하고 기록을 등록해보세요! 🤝' : '아직 등록된 기록이 없어요.<br/>첫 번째로 도전해보세요! 💪'}</div>;
                         return visible.map((r, i) => (
                           <div key={r.nick + i} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : 'bg-slate-50 dark:bg-purple-950 border border-slate-100 dark:border-purple-800'}`}>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-200 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>
                               {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                             </div>
                             <span className={`flex-1 font-bold text-sm truncate ${r.nick === `${currentUser.nickname}#${currentUser.code}` ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100'}`}>{r.nick}{r.nick === `${currentUser.nickname}#${currentUser.code}` ? ' (나)' : ''}</span>
-                            <span className="font-mono font-black text-sm text-slate-600 dark:text-purple-200">{r.score}점</span>
+                            <span className="font-mono font-black text-sm text-slate-600 dark:text-purple-200">{r.score}분</span>
                           </div>
                         ));
                       })()}
@@ -1143,7 +1143,7 @@ export default function App() {
               <div className="space-y-4 text-sm text-slate-600 dark:text-purple-300 leading-relaxed">
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">1. 개인정보 수집 및 이용</h3>
-                  <p>회원가입 시 아이디, 비밀번호(암호화되어 저장됩니다), 닉네임을 수집합니다. 친구 코드, 친구 목록, 랭킹 점수, 의견 게시글은 서비스 제공을 위해 서버에 저장됩니다. 할 일, 시간표, 타이머 기록 등 개인 기록은 기본적으로 사용자의 기기 내부(로컬 스토리지)에만 저장되며 서버로 전송되지 않습니다.</p>
+                  <p>회원가입 시 아이디, 비밀번호(암호화되어 저장됩니다), 닉네임을 수집합니다. 친구 코드, 친구 목록, 랭킹 기록, 의견 게시글은 서비스 제공을 위해 서버에 저장됩니다. 할 일, 시간표, 타이머 기록 등 개인 기록은 기본적으로 사용자의 기기 내부(로컬 스토리지)에만 저장되며 서버로 전송되지 않습니다.</p>
                 </section>
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">2. 데이터 보관 및 삭제</h3>
