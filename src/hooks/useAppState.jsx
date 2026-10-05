@@ -210,20 +210,16 @@ export function useAppState() {
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingReady, setRankingReady] = useState(false); // 랭킹 빈 ID가 설정되었는지
 
-  // 점수 계산: 완료한 할 일 1개 = 10점, 집중 1분 = 1점
-  // 오늘 기준 점수: 오늘 완료한 할 일(개당 10점) + 오늘 집중 분
+  // 오늘 기준 점수: 오늘 집중 분 (서버가 기록을 직접 검증·합산하므로 조작 불가)
   const calcMyScore = () => {
     const today = new Date();
-    const todoScore = todos.filter(t => t.completed && t.completedAt && isSameDay(new Date(t.completedAt), today)).length * 10;
-    const focusMin = Math.round(studyRecords.filter(r => r.startTime && isSameDay(r.startTime, today)).reduce((a, r) => a + r.duration, 0) / 60);
-    return todoScore + focusMin;
+    return Math.round(studyRecords.filter(r => r.startTime && isSameDay(r.startTime, today)).reduce((a, r) => a + r.duration, 0) / 60);
   };
   // 점수 상세 내역 (기준 설명용)
   const getScoreBreakdown = () => {
     const today = new Date();
-    const doneTodos = todos.filter(t => t.completed && t.completedAt && isSameDay(new Date(t.completedAt), today)).length;
     const focusMin = Math.round(studyRecords.filter(r => r.startTime && isSameDay(r.startTime, today)).reduce((a, r) => a + r.duration, 0) / 60);
-    return { doneTodos, todoScore: doneTodos * 10, focusMin };
+    return { focusMin };
   };
 
   // 랭킹 불러오기
@@ -248,24 +244,32 @@ export function useAppState() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRankings(); }, []);
 
-  // 내 점수 업로드 (닉네임#코드 기반)
+  // 내 점수 업로드 (닉네임#코드 기반) — 공부 기록을 함께 보내 서버가 직접 검증·합산
   const submitMyScore = async () => {
     if (!currentUser) { alert('로그인이 필요해요.'); return; }
     const nick = `${currentUser.nickname}#${currentUser.code}`;
-    const myScore = calcMyScore();
+    const today = new Date();
+    const records = studyRecords
+      .filter(r => r.startTime && r.endTime && isSameDay(r.startTime, today))
+      .map(r => ({
+        startTime: (r.startTime instanceof Date ? r.startTime : new Date(r.startTime)).toISOString(),
+        endTime: (r.endTime instanceof Date ? r.endTime : new Date(r.endTime)).toISOString(),
+        duration: r.duration
+      }));
     try {
       const res = await fetch(`${API_BASE}/rankings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nick, score: myScore })
+        body: JSON.stringify({ nick, records })
       });
-      if (!res.ok) throw new Error('fail');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'fail');
       setRankings([...(data.scores || [])].sort((a, b) => b.score - a.score));
-      alert(`✨ ${nick}님, 점수 ${myScore}점 등록 완료!`);
+      const myScore = data.scores.find(s => s.nick === nick)?.score ?? 0;
+      alert(`✨ ${nick}님, 오늘 집중 ${myScore}분 등록 완료!`);
     } catch (e) {
       console.error(e);
-      alert('점수 업로드에 실패했어요. 백엔드 서버가 켜져 있는지 확인해주세요.');
+      alert(e.message && e.message !== 'fail' ? e.message : '점수 업로드에 실패했어요. 백엔드 서버가 켜져 있는지 확인해주세요.');
     }
   };
 
