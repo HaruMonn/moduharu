@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, BarChart2, Settings, Bell } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { Capacitor } from '@capacitor/core';
@@ -35,6 +35,15 @@ const SHOW_OPENING_VIDEO = false;
 // =================== [부드러운 커스텀 드롭다운] ===================
 
 export function useAppState() {
+  // 로컬스토리지 안전 파싱 (데이터 손상 시 기본값으로 복구, 화이트스크린 방지)
+  const safeParse = (key, fallback) => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('lifestyle_darkMode');
     return saved ? JSON.parse(saved) : false;
@@ -60,7 +69,7 @@ export function useAppState() {
   const saveServerUrl = () => {
     let u = serverUrlInput.trim();
     if (!u) { alert('서버 주소를 입력해주세요.'); return; }
-    if (!/^https?:\/\//i.test(u)) u = 'http://' + u;
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     u = u.replace(/\/+$/, '');
     if (!/\/api$/i.test(u)) u = u + '/api';
     try {
@@ -144,60 +153,41 @@ export function useAppState() {
   // =================== [데이터 저장 (LocalStorage)] ===================
   // 새로고침해도 데이터가 유지되도록 로컬스토리지에서 초기값을 불러옵니다.
   const [todos, setTodos] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_todos');
-    return saved ? JSON.parse(saved) : [];
+    const list = safeParse('lifestyle_todos', []);
+    // 구버전 마이그레이션: 완료됐는데 완료 시각이 없으면 지금 시각 부여
+    return list.map(t => (t.completed && !t.completedAt ? { ...t, completedAt: new Date().toISOString() } : t));
   });
-  
+
   const [events, setEvents] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_events');
-    if (saved) {
-      const today = new Date().getDay();
-      return JSON.parse(saved).map(e => ({ ...e, day: typeof e.day === 'number' ? e.day : today }));
-    }
-    return [];
+    const today = new Date().getDay();
+    return safeParse('lifestyle_events', []).map(e => ({ ...e, day: typeof e.day === 'number' ? e.day : today }));
   });
 
   const [studyRecords, setStudyRecords] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_studyRecords');
-    if (saved) {
-      return JSON.parse(saved).map(r => ({ ...r, startTime: new Date(r.startTime), endTime: new Date(r.endTime) }));
-    }
-    return [];
+    return safeParse('lifestyle_studyRecords', []).map(r => ({ ...r, startTime: new Date(r.startTime), endTime: new Date(r.endTime) }));
   });
 
   const [dday, setDday] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_dday');
+    const saved = safeParse('lifestyle_dday', null);
     const defaultDate = new Date();
     defaultDate.setDate(defaultDate.getDate() + 100);
-    return saved ? JSON.parse(saved) : { title: '앱 정식 출시', date: defaultDate.toISOString().split('T')[0] };
+    return saved || { title: '앱 정식 출시', date: defaultDate.toISOString().split('T')[0] };
   });
 
   // =================== [신규 기능 5종 상태] ===================
   // 3. 루틴/습관 반복 스케줄
-  const [routines, setRoutines] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_routines');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [routines, setRoutines] = useState(() => safeParse('lifestyle_routines', []));
   // 4. 장기 목표 (진행률 포함)
-  const [goals, setGoals] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_goals');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [goals, setGoals] = useState(() => safeParse('lifestyle_goals', []));
   // 5. 감정/한 줄 일기 (key: 'YYYY-MM-DD')
-  const [diaries, setDiaries] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_diaries');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [diaries, setDiaries] = useState(() => safeParse('lifestyle_diaries', {}));
   const [diaryText, setDiaryText] = useState('');
   const [diaryMood, setDiaryMood] = useState('🙂');
   const [editingDiary, setEditingDiary] = useState(false);
 
   // =================== [주간 목표/회고 템플릿] ===================
   // 주간 목표: { weekKey, goals: [{id, text, done}], review: { good, bad, next } }
-  const [weeklyPlans, setWeeklyPlans] = useState(() => {
-    const saved = localStorage.getItem('lifestyle_weekly');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [weeklyPlans, setWeeklyPlans] = useState(() => safeParse('lifestyle_weekly', {}));
   const [newWeeklyGoal, setNewWeeklyGoal] = useState('');
   const [weeklyReviewGood, setWeeklyReviewGood] = useState('');
   const [weeklyReviewBad, setWeeklyReviewBad] = useState('');
@@ -213,23 +203,26 @@ export function useAppState() {
   const [newRequestTitle, setNewRequestTitle] = useState('');
   const [newRequestBody, setNewRequestBody] = useState('');
   const [newRequestCategory, setNewRequestCategory] = useState('기능 건의');
-  const [requestVoteId, setRequestVoteId] = useState(null);
 
   // =================== [친구와 경쟁 (랭킹) 상태] ===================
   const [rankings, setRankings] = useState([]);
+  const [rankingFilter, setRankingFilter] = useState('all'); // 'all' | 'friends'
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingReady, setRankingReady] = useState(false); // 랭킹 빈 ID가 설정되었는지
 
   // 점수 계산: 완료한 할 일 1개 = 10점, 집중 1분 = 1점
+  // 오늘 기준 점수: 오늘 완료한 할 일(개당 10점) + 오늘 집중 분
   const calcMyScore = () => {
-    const todoScore = todos.filter(t => t.completed).length * 10;
-    const focusMin = Math.round(studyRecords.reduce((a, r) => a + r.duration, 0) / 60);
+    const today = new Date();
+    const todoScore = todos.filter(t => t.completed && t.completedAt && isSameDay(new Date(t.completedAt), today)).length * 10;
+    const focusMin = Math.round(studyRecords.filter(r => r.startTime && isSameDay(r.startTime, today)).reduce((a, r) => a + r.duration, 0) / 60);
     return todoScore + focusMin;
   };
   // 점수 상세 내역 (기준 설명용)
   const getScoreBreakdown = () => {
-    const doneTodos = todos.filter(t => t.completed).length;
-    const focusMin = Math.round(studyRecords.reduce((a, r) => a + r.duration, 0) / 60);
+    const today = new Date();
+    const doneTodos = todos.filter(t => t.completed && t.completedAt && isSameDay(new Date(t.completedAt), today)).length;
+    const focusMin = Math.round(studyRecords.filter(r => r.startTime && isSameDay(r.startTime, today)).reduce((a, r) => a + r.duration, 0) / 60);
     return { doneTodos, todoScore: doneTodos * 10, focusMin };
   };
 
@@ -405,6 +398,15 @@ export function useAppState() {
     setCurrentUser(null);
   };
 
+  // ---- 알림 상태 (뽀모도로/친구 요청 폴링에서 사용하므로 먼저 선언) ----
+  const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem('lifestyle_notif_enabled') === 'true');
+
+  const sendNotification = useCallback((title, body) => {
+    if (notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body });
+    }
+  }, [notifEnabled]);
+
   // ---- 친구 목록 + 받은 요청 불러오기 ----
   const fetchFriends = async () => {
     if (!currentUser) { setFriends([]); setFriendRequests([]); return; }
@@ -421,6 +423,28 @@ export function useAppState() {
   // (fetchFriends는 매 렌더 새로 생성되므로 deps에 넣으면 무한 루프)
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { fetchFriends(); }, [currentUser]);
+
+  // ---- 친구 요청 폴링 (30초마다) — 새 요청이 오면 알림 ----
+  const prevRequestCount = useRef(0);
+  useEffect(() => {
+    if (!currentUser) return;
+    const t = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/friends?code=${encodeURIComponent(currentUser.code)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const reqs = data.requests || [];
+        if (reqs.length > prevRequestCount.current) {
+          const latest = reqs[reqs.length - 1];
+          sendNotification('🤝 친구 요청이 왔어요!', `${latest.fromNickname || latest.fromCode}님이 친구 요청을 보냈어요.`);
+        }
+        prevRequestCount.current = reqs.length;
+        setFriends(data.friends || []);
+        setFriendRequests(reqs);
+      } catch { /* 폴링 실패는 조용히 무시 */ }
+    }, 30000);
+    return () => clearInterval(t);
+  }, [currentUser, sendNotification]);
 
   // ---- 친구 요청 보내기 ----
   const addFriend = async () => {
@@ -470,6 +494,21 @@ export function useAppState() {
       });
       if (res.ok) fetchFriends();
     } catch (e) { console.error(e); }
+  };
+
+  // ---- 친구 삭제 ----
+  const removeFriend = async (friendCode) => {
+    if (!currentUser) return;
+    if (!window.confirm('이 친구를 삭제할까요?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/friends`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: currentUser.code, friendCode })
+      });
+      if (res.ok) fetchFriends();
+      else { const data = await res.json(); alert(data.error || '친구 삭제에 실패했어요.'); }
+    } catch (e) { console.error(e); alert('친구 삭제에 실패했어요.'); }
   };
 
   // ---- 공지 불러오기 ----
@@ -650,9 +689,11 @@ export function useAppState() {
           if (pomodoroPhase === 'focus') {
             setPomodoroCount(c => c + 1);
             setPomodoroPhase('break');
+            sendNotification('🍅 집중 시간 종료!', '5분간 휴식하세요.');
             return 5 * 60;
           } else {
             setPomodoroPhase('focus');
+            sendNotification('🍅 휴식 종료!', '다시 집중 시간입니다.');
             return 25 * 60;
           }
         }
@@ -660,17 +701,18 @@ export function useAppState() {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [isPomodoro, isTimerRunning, pomodoroPhase]);
+  }, [isPomodoro, isTimerRunning, pomodoroPhase, sendNotification]);
 
+  // 시작/일시정지 토글 (실행 중엔 멈춤, 멈춘 상태에선 재개)
   const startPomodoro = () => {
     if (!isTimerRunning) {
       const now = new Date();
       if (!timerStartTime) setTimerStartTime(now);
       if (!currentStudy && pomodoroPhase === 'focus') setCurrentStudy('뽀모도로 집중');
       setIsTimerRunning(true);
-      setIsPomodoro(false); // 실제 기록 타이머로만 동작
-      // 뽀모도로는 별도 카운트다운으로만 표시
       setIsPomodoro(true);
+    } else {
+      setIsTimerRunning(false);
     }
   };
 
@@ -1101,7 +1143,11 @@ export function useAppState() {
         try {
           const data = JSON.parse(ev.target.result);
           if (data.todos) setTodos(data.todos);
-          if (data.events) setEvents(data.events);
+          if (data.events) {
+            // 구버전 백업(날짜 기반) 마이그레이션: day 필드가 없으면 오늘 요일로
+            const today = new Date().getDay();
+            setEvents(data.events.map(e => ({ ...e, day: typeof e.day === 'number' ? e.day : today })));
+          }
           if (data.studyRecords) setStudyRecords(data.studyRecords.map(r => ({ ...r, startTime: new Date(r.startTime), endTime: new Date(r.endTime) })));
           if (data.dday) setDday(data.dday);
           alert('백업 데이터를 성공적으로 불러왔습니다! ✅');
@@ -1115,7 +1161,7 @@ export function useAppState() {
   };
 
   // =================== [A2. 푸시 알림] ===================
-  const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem('lifestyle_notif_enabled') === 'true');
+  // (notifEnabled, sendNotification은 파일 앞쪽에서 선언됨)
 
   const requestNotification = async () => {
     if (!('Notification' in window)) { alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
@@ -1139,11 +1185,7 @@ export function useAppState() {
     }
   };
 
-  const sendNotification = (title, body) => {
-    if (notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body });
-    }
-  };
+  // (sendNotification은 파일 앞쪽에서 선언됨)
 
 
   useEffect(() => {
@@ -1167,7 +1209,7 @@ export function useAppState() {
     setNewTodoText('');
   };
 
-  const toggleTodo = (id) => setTodos(todos.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));
+  const toggleTodo = (id) => setTodos(todos.map(todo => todo.id === id ? { ...todo, completed: !todo.completed, completedAt: !todo.completed ? new Date().toISOString() : null } : todo));
   const deleteTodo = (id) => setTodos(todos.filter(todo => todo.id !== id));
 
   // =================== [시간표 함수] ===================
@@ -1211,12 +1253,21 @@ export function useAppState() {
   };
 
   const stopTimer = () => {
-    if (timerSeconds > 0) {
+    // 뽀모도로 모드에선 집중 시간만 기록 (휴식 시간 제외)
+    let duration = timerSeconds;
+    let title = currentStudy || '기록 없는 시간';
+    if (isPomodoro) {
+      const focusElapsed = pomodoroPhase === 'focus' ? Math.max(0, 25 * 60 - pomodoroRemaining) : 0;
+      duration = pomodoroCount * 25 * 60 + focusElapsed;
+      if (!currentStudy) title = '뽀모도로 집중';
+    }
+    if (duration > 0) {
       const endTime = new Date();
-      const newRecord = { id: Date.now(), title: currentStudy || '기록 없는 시간', startTime: timerStartTime || new Date(endTime.getTime() - timerSeconds * 1000), endTime: endTime, duration: timerSeconds, color: timerColor };
+      const newRecord = { id: Date.now(), title, startTime: timerStartTime || new Date(endTime.getTime() - duration * 1000), endTime: endTime, duration, color: timerColor };
       setStudyRecords([newRecord, ...studyRecords]);
     }
     setIsTimerRunning(false); setTimerSeconds(0); setTimerStartTime(null); setCurrentStudy('');
+    setPomodoroPhase('focus'); setPomodoroRemaining(25 * 60); setPomodoroCount(0);
   };
 
   const formatTimerDisplay = (totalSeconds) => {
@@ -1236,41 +1287,13 @@ export function useAppState() {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startH, startM, 0);
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), endH, endM, 0);
-    if (end <= start) return alert('종료 시간은 시작 시간보다 늦어야 합니다.');
+    if (end <= start) end.setDate(end.getDate() + 1); // 자정을 넘기는 기록 허용 (예: 23:00~00:30)
     const duration = Math.floor((end.getTime() - start.getTime()) / 1000);
     setStudyRecords(studyRecords.map(r => r.id === editingRecord.id ? { ...r, title: recordFormTitle, startTime: start, endTime: end, duration, color: recordFormColor } : r));
     setIsTimerModalOpen(false);
   };
 
   const deleteRecord = () => { setStudyRecords(studyRecords.filter(r => r.id !== editingRecord.id)); setIsTimerModalOpen(false); };
-
-  const renderSlotFill = (hour, minuteBlock) => {
-    const now = currentTime;
-    const slotStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minuteBlock * 10, 0).getTime();
-    const slotEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, (minuteBlock + 1) * 10, 0).getTime();
-
-    const record = studyRecords.find(r => r.startTime.getTime() < slotEnd && r.endTime.getTime() > slotStart);
-    if (record) {
-       const overlapStart = Math.max(record.startTime.getTime(), slotStart);
-       const overlapEnd = Math.min(record.endTime.getTime(), slotEnd);
-       const fillPercent = Math.min(100, ((overlapEnd - overlapStart) / (10 * 60 * 1000)) * 100);
-       const marginLeft = Math.max(0, ((overlapStart - slotStart) / (10 * 60 * 1000)) * 100);
-       return <div className={`h-full ${record.color}`} style={{ width: `${fillPercent}%`, marginLeft: `${marginLeft}%` }}></div>;
-    }
-
-    if (timerStartTime) {
-       const rStart = timerStartTime.getTime();
-       const rEnd = isTimerRunning ? new Date().getTime() : rStart + (timerSeconds * 1000);
-       if (rStart < slotEnd && rEnd > slotStart) {
-          const overlapStart = Math.max(rStart, slotStart);
-          const overlapEnd = Math.min(rEnd, slotEnd);
-          const fillPercent = Math.min(100, ((overlapEnd - overlapStart) / (10 * 60 * 1000)) * 100);
-          const marginLeft = Math.max(0, ((overlapStart - slotStart) / (10 * 60 * 1000)) * 100);
-          return <div className={`h-full ${timerColor} ${isTimerRunning ? 'opacity-90 animate-pulse' : 'opacity-100'}`} style={{ width: `${fillPercent}%`, marginLeft: `${marginLeft}%`, transition: 'width 1s linear' }}></div>;
-       }
-    }
-    return null;
-  };
 
   // 공통 헤더 렌더링 함수
   const renderHeader = (title, subtitle) => (
@@ -1394,8 +1417,8 @@ export function useAppState() {
     setNewWeeklyGoal, weeklyReviewGood, setWeeklyReviewGood, weeklyReviewBad, setWeeklyReviewBad, weeklyReviewNext,
     setWeeklyReviewNext, editingReview, setEditingReview, requests, setRequests, requestsLoading,
     setRequestsLoading, requestsError, setRequestsError, newRequestTitle, setNewRequestTitle, newRequestBody,
-    setNewRequestBody, newRequestCategory, setNewRequestCategory, requestVoteId, setRequestVoteId, rankings,
-    setRankings, rankingLoading, setRankingLoading, rankingReady, setRankingReady, calcMyScore,
+    setNewRequestBody, newRequestCategory, setNewRequestCategory, rankings,
+    setRankings, rankingLoading, setRankingLoading, rankingReady, setRankingReady, rankingFilter, setRankingFilter, calcMyScore,
     getScoreBreakdown, fetchRankings, submitMyScore, currentUser, setCurrentUser, authMode,
     setAuthMode, authId, setAuthId, authPassword, setAuthPassword, authPasswordConfirm,
     setAuthPasswordConfirm, authNickname, setAuthNickname, authError, setAuthError, authBusy,
@@ -1404,7 +1427,7 @@ export function useAppState() {
     setAnnounceTitle, announceBody, setAnnounceBody, lastSeenAnnounce, setLastSeenAnnounce, isAdmin,
     setIsAdmin, adminToken, setAdminToken, adminTokenInput, setAdminTokenInput, NICKNAME_PATTERN,
     verifyAdmin, logoutAdmin, handleSignup, handleLogin, handleLogout, fetchFriends,
-    addFriend, acceptFriend, rejectFriend, fetchAnnouncements, addAnnouncement, deleteAnnouncement,
+    addFriend, acceptFriend, rejectFriend, removeFriend, fetchAnnouncements, addAnnouncement, deleteAnnouncement,
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
     setFormTitle, formStart, setFormStart, formEnd, setFormEnd, formColor,
@@ -1426,7 +1449,7 @@ export function useAppState() {
     exportData, importData, notifEnabled, setNotifEnabled, requestNotification, sendNotification,
     completeOnboarding, addTodo, toggleTodo, deleteTodo, currentHourDecimal, decimalToTime,
     timeToDecimal, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
-    formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, renderSlotFill,
+    formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord,
     renderHeader, isSameDay, todayRecords, getTotalStudySeconds, getYesterdaySeconds, getComparedToYesterday,
     getTodoCompletionRate, handleShare, doughnutData, getWeekBarData, barData, captureAndShare,
   };
