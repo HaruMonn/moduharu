@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
+import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -42,12 +44,44 @@ async function writeBin(id, record) {
   return true;
 }
 
-// 간단 해시 (프론트와 동일하게 유지해야 로그인 호환)
-const hashPassword = (pw) => {
+// 구버전 단순 해시 (기존 계정 로그인 호환용 — 신규 가입에는 scrypt 사용)
+const legacyHashPassword = (pw) => {
   let h = 5381;
   for (let i = 0; i < pw.length; i++) h = ((h << 5) + h + pw.charCodeAt(i)) | 0;
   return 'h' + Math.abs(h).toString(36) + '_' + pw.length;
 };
+
+// 안전한 비밀번호 해시 (Node 내장 crypto.scrypt — 별도 의존성 없음)
+// 저장 형식: s2$<salt hex>$<derived hex>
+const scryptAsync = promisify(crypto.scrypt);
+const hashPasswordSecure = async (pw) => {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = await scryptAsync(pw, salt, 64);
+  return `s2$${salt}$${derived.toString('hex')}`;
+};
+const verifyPasswordSecure = async (pw, hash) => {
+  try {
+    const [ver, salt, hex] = String(hash).split('$');
+    if (ver !== 's2' || !salt || !hex) return false;
+    const derived = await scryptAsync(pw, salt, 64);
+    const expected = Buffer.from(hex, 'hex');
+    return expected.length === derived.length && crypto.timingSafeEqual(expected, derived);
+  } catch {
+    return false;
+  }
+};
+
+// 응답에서 비밀번호를 제외한 사용자 객체 반환
+const publicUser = (u) => {
+  if (!u) return u;
+  const rest = { ...u };
+  delete rest.password;
+  return rest;
+};
+
+// 친구 코드는 대소문자 구분 없이 비교 (4자리 영숫자라 오타 방지)
+const sameCode = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+const findUserByCode = (users, code) => users.find((u) => sameCode(u.code, code));
 
 const generateUserCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -103,9 +137,11 @@ app.post('/api/requests/:id/vote', async (req, res) => {
   try {
     const id = Number(req.params.id);
     const { delta } = req.body || {};
+    // delta는 +1(추천) 또는 -1(취소)만 허용 — 임의값으로 점수 조작 방지
+    if (delta !== 1 && delta !== -1) return res.status(400).json({ error: '잘못된 추천 요청이에요.' });
     const record = await readBin(REQUESTS_BIN);
     const items = (record.items || []).map((r) =>
-      r.id === id ? { ...r, votes: Math.max(0, (r.votes || 0) + (delta || 0)) } : r
+      r.id === id ? { ...r, votes: Math.max(0, (r.votes || 0) + delta) } : r
     );
     await writeBin(REQUESTS_BIN, { ...record, items });
     res.json({ items: items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
@@ -140,10 +176,15 @@ app.get('/api/rankings', async (req, res) => {
 app.post('/api/rankings', async (req, res) => {
   try {
     const { nick, score } = req.body || {};
-    if (!nick) return res.status(400).json({ error: '닉네임이 필요해요.' });
+    // 닉네임: 필수 문자열, 50자로 제한
+    const cleanNick = typeof nick === 'string' ? nick.trim().slice(0, 50) : '';
+    if (!cleanNick) return res.status(400).json({ error: '닉네임이 필요해요.' });
+    // 점수: 0 이상의 정수만 허용 (음수·NaN·문자열 거부, 소수점은 버림)
+    const numScore = typeof score === 'number' && Number.isFinite(score) ? Math.floor(score) : NaN;
+    if (Number.isNaN(numScore) || numScore < 0) return res.status(400).json({ error: '점수가 올바르지 않아요.' });
     const record = await readBin(RANKINGS_BIN);
-    let scores = (record.scores || []).filter((s) => s.nick !== nick);
-    scores.push({ nick, score: Number(score) || 0, updatedAt: new Date().toISOString() });
+    let scores = (record.scores || []).filter((s) => s.nick !== cleanNick);
+    scores.push({ nick: cleanNick, score: numScore, updatedAt: new Date().toISOString() });
     await writeBin(RANKINGS_BIN, { ...record, scores });
     res.json({ scores: scores.sort((a, b) => b.score - a.score) });
   } catch {
@@ -155,19 +196,25 @@ app.post('/api/rankings', async (req, res) => {
 app.post('/api/users/signup', async (req, res) => {
   try {
     const { id, password, nickname } = req.body || {};
-    if (!id || !password || !nickname) return res.status(400).json({ error: '모든 항목을 입력해주세요.' });
+    // 서버 측 입력 검증
+    const cleanId = typeof id === 'string' ? id.trim() : '';
+    const cleanNickname = typeof nickname === 'string' ? nickname.trim() : '';
+    if (!/^[A-Za-z0-9]{4,}$/.test(cleanId)) return res.status(400).json({ error: '아이디는 4자 이상의 영문/숫자 조합이어야 해요.' });
+    if (typeof password !== 'string' || password.length < 4) return res.status(400).json({ error: '비밀번호는 4자 이상이어야 해요.' });
+    if (cleanNickname.length < 1 || cleanNickname.length > 20) return res.status(400).json({ error: '닉네임은 1~20자여야 해요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
-    if (users.some((u) => u.id === id)) return res.status(409).json({ error: '이미 사용 중인 아이디예요.' });
+    if (users.some((u) => u.id === cleanId)) return res.status(409).json({ error: '이미 사용 중인 아이디예요.' });
 
-    const existingCodes = new Set(users.map((u) => u.code));
+    const existingCodes = new Set(users.map((u) => String(u.code).toLowerCase()));
     let code = generateUserCode();
-    while (existingCodes.has(code)) code = generateUserCode();
+    while (existingCodes.has(code.toLowerCase())) code = generateUserCode();
 
-    const newUser = { id, password: hashPassword(password), nickname, code, friends: [], friendRequests: [], createdAt: new Date().toISOString() };
+    const hashed = await hashPasswordSecure(password);
+    const newUser = { id: cleanId, password: hashed, nickname: cleanNickname, code, friends: [], friendRequests: [], createdAt: new Date().toISOString() };
     users.push(newUser);
     await writeBin(USERS_BIN, { ...record, users });
-    res.json({ user: newUser });
+    res.json({ user: publicUser(newUser) });
   } catch {
     res.status(500).json({ error: '가입 저장에 실패했어요.' });
   }
@@ -179,10 +226,26 @@ app.post('/api/users/login', async (req, res) => {
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
     const found = users.find((u) => u.id === id);
-    if (!found || found.password !== hashPassword(password)) {
+    if (!found || typeof password !== 'string') {
       return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않아요.' });
     }
-    res.json({ user: found });
+    // 1) scrypt 해시 비교 → 2) 구버전 해시 비교 (맞으면 scrypt로 재해시해 저장)
+    let ok = false;
+    try { ok = await verifyPasswordSecure(password, found.password); } catch { ok = false; }
+    let migrated = false;
+    if (!ok && found.password === legacyHashPassword(password)) {
+      ok = true;
+      migrated = true;
+    }
+    if (!ok) {
+      return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않아요.' });
+    }
+    if (migrated) {
+      const hashed = await hashPasswordSecure(password);
+      const updated = users.map((u) => (u.id === found.id ? { ...u, password: hashed } : u));
+      await writeBin(USERS_BIN, { ...record, users: updated });
+    }
+    res.json({ user: publicUser(found) });
   } catch {
     res.status(500).json({ error: '로그인에 실패했어요.' });
   }
@@ -195,7 +258,7 @@ app.get('/api/users/lookup', async (req, res) => {
     if (!code) return res.status(400).json({ error: '코드가 필요해요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
-    const found = users.find((u) => u.code === code);
+    const found = findUserByCode(users, code);
     if (!found) return res.status(404).json({ error: '사용자를 찾을 수 없어요.' });
     res.json({ user: { nickname: found.nickname, code: found.code } });
   } catch {
@@ -211,17 +274,17 @@ app.get('/api/friends', async (req, res) => {
     if (!code) return res.status(400).json({ error: '코드가 필요해요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
-    const me = users.find((u) => u.code === code);
+    const me = findUserByCode(users, code);
     if (!me) return res.status(404).json({ error: '사용자를 찾을 수 없어요.' });
 
     // 친구 목록 (code → nickname)
     const friends = (me.friends || []).map((fcode) => {
-      const f = users.find((u) => u.code === fcode);
+      const f = findUserByCode(users, fcode);
       return { code: fcode, nickname: f ? f.nickname : fcode };
     });
     // 받은 친구 요청 (보낸 사람 코드/닉네임)
     const requests = (me.friendRequests || []).map((r) => {
-      const from = users.find((u) => u.code === r.fromCode);
+      const from = findUserByCode(users, r.fromCode);
       return { fromCode: r.fromCode, fromNickname: from ? from.nickname : r.fromCode, at: r.at };
     });
     res.json({ friends, requests });
@@ -235,28 +298,33 @@ app.post('/api/friends/request', async (req, res) => {
   try {
     const { fromCode, toCode } = req.body || {};
     if (!fromCode || !toCode) return res.status(400).json({ error: '코드가 필요해요.' });
-    if (fromCode === toCode) return res.status(400).json({ error: '자기 자신에게는 요청할 수 없어요.' });
+    if (sameCode(fromCode, toCode)) return res.status(400).json({ error: '자기 자신에게는 요청할 수 없어요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
-    const target = users.find((u) => u.code === toCode);
+    const target = findUserByCode(users, toCode);
     if (!target) return res.status(404).json({ error: '대상 사용자를 찾을 수 없어요.' });
-    const me = users.find((u) => u.code === fromCode);
+    const me = findUserByCode(users, fromCode);
     if (!me) return res.status(404).json({ error: '내 계정을 찾을 수 없어요.' });
+    // 저장된 원래 코드 형식(대소문자)을 기준으로 사용 — 데이터 일관성 유지
+    const myCode = me.code;
+    const theirCode = target.code;
 
     // 이미 친구인지
-    if ((target.friends || []).includes(fromCode)) return res.status(400).json({ error: '이미 친구예요.' });
+    if ((target.friends || []).some((f) => sameCode(f, myCode))) return res.status(400).json({ error: '이미 친구예요.' });
     // 이미 요청을 보냈는지
-    if ((target.friendRequests || []).some((r) => r.fromCode === fromCode)) {
+    if ((target.friendRequests || []).some((r) => sameCode(r.fromCode, myCode))) {
       return res.status(400).json({ error: '이미 친구 요청을 보냈어요.' });
     }
     // 상대가 나에게 이미 요청을 보냈다면 바로 친구 맺기
-    if ((me.friendRequests || []).some((r) => r.fromCode === toCode)) {
+    if ((me.friendRequests || []).some((r) => sameCode(r.fromCode, theirCode))) {
       const updated = users.map((u) => {
-        if (u.code === fromCode) {
-          return { ...u, friends: [...(u.friends || []), toCode], friendRequests: (u.friendRequests || []).filter((r) => r.fromCode !== toCode) };
+        if (sameCode(u.code, myCode)) {
+          const friends = (u.friends || []).some((f) => sameCode(f, theirCode)) ? u.friends : [...(u.friends || []), theirCode];
+          return { ...u, friends, friendRequests: (u.friendRequests || []).filter((r) => !sameCode(r.fromCode, theirCode)) };
         }
-        if (u.code === toCode) {
-          return { ...u, friends: [...(u.friends || []), fromCode] };
+        if (sameCode(u.code, theirCode)) {
+          const friends = (u.friends || []).some((f) => sameCode(f, myCode)) ? u.friends : [...(u.friends || []), myCode];
+          return { ...u, friends };
         }
         return u;
       });
@@ -266,8 +334,8 @@ app.post('/api/friends/request', async (req, res) => {
 
     // 요청 추가
     const updated = users.map((u) => {
-      if (u.code === toCode) {
-        return { ...u, friendRequests: [...(u.friendRequests || []), { fromCode, at: new Date().toISOString() }] };
+      if (sameCode(u.code, theirCode)) {
+        return { ...u, friendRequests: [...(u.friendRequests || []), { fromCode: myCode, at: new Date().toISOString() }] };
       }
       return u;
     });
@@ -285,12 +353,20 @@ app.post('/api/friends/accept', async (req, res) => {
     if (!code || !fromCode) return res.status(400).json({ error: '코드가 필요해요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
+    const me = findUserByCode(users, code);
+    const sender = findUserByCode(users, fromCode);
+    if (!me || !sender) return res.status(404).json({ error: '사용자를 찾을 수 없어요.' });
+    // 실제로 온 요청이 있는지 확인
+    if (!(me.friendRequests || []).some((r) => sameCode(r.fromCode, sender.code))) {
+      return res.status(404).json({ error: '내게 온 요청이 없어요.' });
+    }
+    const addUnique = (list, c) => ((list || []).some((x) => sameCode(x, c)) ? list : [...(list || []), c]);
     const updated = users.map((u) => {
-      if (u.code === code) {
-        return { ...u, friends: [...(u.friends || []), fromCode], friendRequests: (u.friendRequests || []).filter((r) => r.fromCode !== fromCode) };
+      if (sameCode(u.code, me.code)) {
+        return { ...u, friends: addUnique(u.friends, sender.code), friendRequests: (u.friendRequests || []).filter((r) => !sameCode(r.fromCode, sender.code)) };
       }
-      if (u.code === fromCode) {
-        return { ...u, friends: [...(u.friends || []), code] };
+      if (sameCode(u.code, sender.code)) {
+        return { ...u, friends: addUnique(u.friends, me.code) };
       }
       return u;
     });
@@ -308,9 +384,11 @@ app.post('/api/friends/reject', async (req, res) => {
     if (!code || !fromCode) return res.status(400).json({ error: '코드가 필요해요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
+    const me = findUserByCode(users, code);
+    if (!me) return res.status(404).json({ error: '사용자를 찾을 수 없어요.' });
     const updated = users.map((u) => {
-      if (u.code === code) {
-        return { ...u, friendRequests: (u.friendRequests || []).filter((r) => r.fromCode !== fromCode) };
+      if (sameCode(u.code, me.code)) {
+        return { ...u, friendRequests: (u.friendRequests || []).filter((r) => !sameCode(r.fromCode, fromCode)) };
       }
       return u;
     });
@@ -318,6 +396,35 @@ app.post('/api/friends/reject', async (req, res) => {
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: '친구 요청 거절에 실패했어요.' });
+  }
+});
+
+// 친구 삭제 (양쪽 목록에서 서로 제거)
+app.delete('/api/friends', async (req, res) => {
+  try {
+    const { code, friendCode } = req.body || {};
+    if (!code || !friendCode) return res.status(400).json({ error: '코드가 필요해요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const me = findUserByCode(users, code);
+    const friend = findUserByCode(users, friendCode);
+    if (!me || !friend) return res.status(404).json({ error: '사용자를 찾을 수 없어요.' });
+    if (!(me.friends || []).some((f) => sameCode(f, friend.code))) {
+      return res.status(404).json({ error: '친구 관계가 아니에요.' });
+    }
+    const updated = users.map((u) => {
+      if (sameCode(u.code, me.code)) {
+        return { ...u, friends: (u.friends || []).filter((f) => !sameCode(f, friend.code)) };
+      }
+      if (sameCode(u.code, friend.code)) {
+        return { ...u, friends: (u.friends || []).filter((f) => !sameCode(f, me.code)) };
+      }
+      return u;
+    });
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: '친구 삭제에 실패했어요.' });
   }
 });
 
