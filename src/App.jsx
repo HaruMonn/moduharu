@@ -759,8 +759,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ======================= 플래너 탭 ======================= */}
-        {activeTab === 'planner' && (
+        {/* ======================= 플래너 탭 (관리자 전용) ======================= */}
+        {isAdmin && activeTab === 'planner' && (
           <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
             {renderHeader('세무사 플래너', '2027년 1차 4월 · 2차 7월')}
             <div className="flex-1 overflow-y-auto p-5">
@@ -934,10 +934,12 @@ export default function App() {
             <span className="text-[10px] font-bold">랭킹</span>
           </button>
 
-          <button onClick={() => setActiveTab('planner')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'planner' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
-            <GraduationCap size={24} className={activeTab === 'planner' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
-            <span className="text-[10px] font-bold">플래너</span>
-          </button>
+          {isAdmin && (
+            <button onClick={() => setActiveTab('planner')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'planner' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+              <GraduationCap size={24} className={activeTab === 'planner' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+              <span className="text-[10px] font-bold">플래너</span>
+            </button>
+          )}
 
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <MessageSquare size={24} className={activeTab === 'requests' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
