@@ -57,7 +57,7 @@ const GUIDE_1CHA = [
   {
     subject: '세법학개론',
     items: [
-      '소득세/법인세/부가가치세 — 유은종 (책 독학 + 막히는 부분만 강의)',
+      '소득세/법인세/부가가치세 — 정우승 (책 독학 + 막히는 부분만 강의)',
       '국세기본법 — 강경태 (무료강의)',
       '국징법/조세범처벌법/국제조세 — 양소영 (기타세법)',
     ],
@@ -76,11 +76,11 @@ const GUIDE_1CHA = [
 const GUIDE_2CHA = [
   {
     subject: '세법학 1부',
-    items: ['유은종 — 국세기본법/법인세/소득세/상속증여세'],
+    items: ['유은종 / 정우승 (고민 중) — 국세기본법/법인세/소득세/상속증여세'],
   },
   {
     subject: '세법학 2부',
-    items: ['유은종 — 부가가치세/개별소비세/지방세/조특법'],
+    items: ['유은종 / 정우승 (고민 중) — 부가가치세/개별소비세/지방세/조특법'],
   },
   {
     subject: '회계학 1부',
@@ -101,6 +101,39 @@ const SUBJECT_RATIO = [
   { name: '회계학', pct: 35, bar: 'bg-indigo-500' },
   { name: '재정학', pct: 15, bar: 'bg-violet-400' },
   { name: '행정소송법', pct: 15, bar: 'bg-indigo-300' },
+];
+
+const TUTORING_SCHEDULE = [
+  {
+    day: '금',
+    headerBg: 'bg-violet-500',
+    sessions: [
+      { time: '18:30 – 21:30', place: '진량', detail: '진량호반베르디움더포레스트', pill: 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300' },
+    ],
+  },
+  {
+    day: '토',
+    headerBg: 'bg-indigo-500',
+    sessions: [
+      { time: '09:00 – 12:00', place: '진량', detail: '진량호반베르디움더포레스트', pill: 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300' },
+      { time: '13:00 – 16:00', place: '수성', detail: '동대구로 10 수성 더파크', pill: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300' },
+      { time: '17:00 – 21:00', place: '칠곡', detail: '', pill: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300' },
+    ],
+  },
+  {
+    day: '일',
+    headerBg: 'bg-rose-500',
+    sessions: [
+      { time: '20:00 – 24:00', place: '평택', detail: '', pill: 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300' },
+    ],
+  },
+  {
+    day: '월',
+    headerBg: 'bg-rose-500',
+    sessions: [
+      { time: '18:00 – 22:00', place: '평택', detail: '', pill: 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300' },
+    ],
+  },
 ];
 
 function GuideSection({ title, guides }) {
@@ -161,9 +194,6 @@ export default function StudyPlanner() {
           <GuideSection title="1차 과목" guides={GUIDE_1CHA} />
           <GuideSection title="2차 과목" guides={GUIDE_2CHA} />
         </div>
-        <div className="mt-3 text-xs text-slate-400 dark:text-purple-300/70 font-bold px-1 leading-relaxed">
-          핵심 원칙 — 1차 강사를 2차까지 끌고 가기. 세법 유은종, 회계 김기동+이승우.
-        </div>
       </div>
 
       {/* ===== 과목 비중 ===== */}
@@ -182,19 +212,32 @@ export default function StudyPlanner() {
             </div>
           ))}
         </div>
-        <div className="mt-4 text-xs text-slate-400 dark:text-purple-300/70 font-bold leading-relaxed">
-          주 44시간 · 6개월이면 1,100시간. 1차는 복습 위주, 처음부터 2차 깊이로 공부하는 게 핵심.
-        </div>
       </div>
 
-      {/* ===== 과외 스케줄 ===== */}
-      <div className="shrink-0 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-        <h3 className="text-base font-black text-slate-800 dark:text-purple-100 mb-3">과외 스케줄</h3>
-        <div className="flex flex-col gap-2 text-[13px]">
-          <div className="flex gap-3"><span className="font-black text-slate-700 dark:text-purple-100 w-8 shrink-0">금</span><span className="text-slate-600 dark:text-purple-200">18:30 – 21:30 진량</span></div>
-          <div className="flex gap-3"><span className="font-black text-slate-700 dark:text-purple-100 w-8 shrink-0">토</span><span className="text-slate-600 dark:text-purple-200">09 – 12 진량 · 13 – 16 수성 · 17 – 21 칠곡</span></div>
-          <div className="flex gap-3"><span className="font-black text-slate-700 dark:text-purple-100 w-8 shrink-0">일</span><span className="text-slate-600 dark:text-purple-200">20:00 – 24:00 평택</span></div>
-          <div className="flex gap-3"><span className="font-black text-slate-700 dark:text-purple-100 w-8 shrink-0">월</span><span className="text-slate-600 dark:text-purple-200">18:00 – 22:00 평택</span></div>
+      {/* ===== 과외 시간표 ===== */}
+      <div>
+        <h3 className="text-base font-black text-slate-800 dark:text-purple-100 mb-3 px-1">과외 시간표</h3>
+        <div className="flex flex-col gap-3">
+          {TUTORING_SCHEDULE.map((d) => (
+            <div key={d.day} className="shrink-0 bg-white dark:bg-purple-900 rounded-2xl shadow-sm border border-slate-100 dark:border-purple-800 overflow-hidden">
+              <div className={`${d.headerBg} px-4 py-2`}>
+                <span className="text-white font-black text-sm">{d.day}요일</span>
+              </div>
+              <div className="p-3 flex flex-col gap-2">
+                {d.sessions.map((s, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className={`shrink-0 text-xs font-black rounded-lg px-2.5 py-1.5 whitespace-nowrap ${s.pill}`}>
+                      {s.time}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-bold text-slate-700 dark:text-purple-100">{s.place}</div>
+                      {s.detail && <div className="text-xs text-slate-400 dark:text-purple-300/70">{s.detail}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
