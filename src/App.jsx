@@ -1,7 +1,8 @@
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
+import StudyPlanner from './components/StudyPlanner';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
@@ -758,6 +759,16 @@ export default function App() {
           </div>
         )}
 
+        {/* ======================= 플래너 탭 ======================= */}
+        {activeTab === 'planner' && (
+          <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
+            {renderHeader('세무사 플래너', '2027년 1차 4월 · 2차 7월')}
+            <div className="flex-1 overflow-y-auto p-5">
+              <StudyPlanner />
+            </div>
+          </div>
+        )}
+
         {/* ======================= 통계 화면 모달 (2단계) ======================= */}
         {showStats && (
           <div className="absolute inset-0 z-50 flex flex-col justify-end bg-slate-900/40 dark:bg-purple-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -921,6 +932,11 @@ export default function App() {
           <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">랭킹</span>
+          </button>
+
+          <button onClick={() => setActiveTab('planner')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'planner' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+            <GraduationCap size={24} className={activeTab === 'planner' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+            <span className="text-[10px] font-bold">플래너</span>
           </button>
 
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
