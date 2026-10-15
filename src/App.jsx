@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
@@ -24,14 +24,15 @@ export default function App() {
     setNewRequestCategory, rankings, rankingLoading, rankingReady, rankingFilter, setRankingFilter, calcMyScore, submitMyScore,
     currentUser, authMode, setAuthMode, authId, setAuthId, authPassword,
     setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, authError,
-    setAuthError, authBusy, authRole, setAuthRole, friends, friendRequests, friendCodeInput, setFriendCodeInput,
+    setAuthError, authBusy, friends, friendRequests, friendCodeInput, setFriendCodeInput,
     announcements, showNotif, setShowNotif, announceTitle, setAnnounceTitle, announceBody,
     setAnnounceBody, isAdmin, adminTokenInput, setAdminTokenInput, verifyAdmin, logoutAdmin,
     handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend, removeFriend,
     addAnnouncement, deleteAnnouncement,
-    setMyTutorRole, fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
+    adminMode, setAdminMode, fetchAdminStatus, activateAdminMode,
+    fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
     openTutorBoard, saveTutorBoard, fetchMyBoard,
-    tutorStudents, tutorBoard, tutorRecords, tutorLoading, tutorError,
+    tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
     tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
     newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
@@ -54,13 +55,36 @@ export default function App() {
     doughnutData, barData, captureAndShare,
   } = useAppState();
 
+  // 과외 관리자 모드 PIN 모달
+  const [showAdminPin, setShowAdminPin] = useState(false);
+  const [adminPin, setAdminPin] = useState('');
+  const [adminPinMode, setAdminPinMode] = useState('enter'); // 'setup' | 'enter'
+  const [adminPinError, setAdminPinError] = useState('');
+  const [adminPinBusy, setAdminPinBusy] = useState(false);
+
+  const submitAdminPin = async () => {
+    setAdminPinError('');
+    if (!/^\d{4,12}$/.test(adminPin.trim())) { setAdminPinError('PIN은 4~12자리 숫자로 입력해주세요.'); return; }
+    setAdminPinBusy(true);
+    try {
+      const data = await activateAdminMode(adminPin.trim());
+      setShowAdminPin(false);
+      setAdminPin('');
+      if (data.isNewPin) alert('관리자 PIN이 설정됐어요. 잊지 마세요!');
+    } catch (e) {
+      setAdminPinError(e.message || 'PIN 확인에 실패했어요.');
+    } finally {
+      setAdminPinBusy(false);
+    }
+  };
+
   // 과외 탭 진입 시 데이터 자동 불러오기
   useEffect(() => {
     if (activeTab !== 'tutor' || !currentUser) return;
-    if (currentUser.role === 'student' && !tutorBoard) fetchMyBoard();
-    if (currentUser.role === 'teacher' && tutorView === 'home' && tutorStudents.length === 0) fetchTutorStudents();
+    if (!adminMode && !tutorBoard) fetchMyBoard();
+    if (adminMode && tutorView === 'home' && tutorStudents.length === 0) fetchTutorStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, adminMode]);
 
   // 시간표: 00:00~24:00 고정, 행 높이를 화면에 맞춰 자동으로 채움 (스크롤 없음)
 
@@ -149,14 +173,6 @@ export default function App() {
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 확인</label>
                   <input type="password" value={authPasswordConfirm} onChange={(e) => setAuthPasswordConfirm(e.target.value)} placeholder="비밀번호를 다시 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">역할</label>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setAuthRole('student')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${authRole === 'student' ? 'bg-indigo-500 text-white shadow' : 'bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300'}`}>📚 학생</button>
-                    <button type="button" onClick={() => setAuthRole('teacher')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${authRole === 'teacher' ? 'bg-indigo-500 text-white shadow' : 'bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300'}`}>🎓 선생님</button>
-                  </div>
-                  <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-1">학생은 선생님과 시간표·스케줄·숙제를 공유해요</p>
                 </div>
                 {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
                 <button type="submit" disabled={authBusy} className="w-full bg-indigo-500 text-white rounded-xl font-bold py-3.5 hover:opacity-90 transition shadow-md disabled:opacity-50 mt-1">
@@ -709,13 +725,13 @@ export default function App() {
             currentUser={currentUser} events={events} studyRecords={studyRecords}
             decimalToTime={decimalToTime} timeToDecimal={timeToDecimal} setActiveTab={setActiveTab}
             renderHeader={renderHeader}
-            tutorStudents={tutorStudents} tutorBoard={tutorBoard} tutorRecords={tutorRecords}
+            tutorStudents={tutorStudents} tutorSummaries={tutorSummaries} tutorBoard={tutorBoard} tutorRecords={tutorRecords}
             tutorLoading={tutorLoading} tutorError={tutorError}
             tutorStudentCodeInput={tutorStudentCodeInput} setTutorStudentCodeInput={setTutorStudentCodeInput}
             tutorView={tutorView} setTutorView={setTutorView}
-            setMyTutorRole={setMyTutorRole} registerTutorStudent={registerTutorStudent}
+            setAdminMode={setAdminMode} registerTutorStudent={registerTutorStudent}
             unregisterTutorStudent={unregisterTutorStudent} openTutorBoard={openTutorBoard}
-            saveTutorBoard={saveTutorBoard}
+            saveTutorBoard={saveTutorBoard} fetchTutorStudents={fetchTutorStudents} adminMode={adminMode}
           />
         )}
 
@@ -936,14 +952,14 @@ export default function App() {
 
         {/* ======================= 하단 네비게이션 ======================= */}
         <nav className="absolute bottom-0 w-full nav-safe bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40">
-          {currentUser?.role !== 'student' && (
+          {adminMode && (
           <button onClick={() => setActiveTab('todo')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'todo' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <CheckSquare size={24} className={activeTab === 'todo' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">할 일</span>
           </button>
           )}
           
-          {currentUser?.role !== 'student' && (
+          {adminMode && (
           <button onClick={() => setActiveTab('timetable')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'timetable' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Calendar size={24} className={activeTab === 'timetable' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">시간표</span>
@@ -955,7 +971,7 @@ export default function App() {
             <span className="text-[10px] font-bold">타이머</span>
           </button>
 
-          {currentUser?.role !== 'student' && (
+          {adminMode && (
           <button onClick={() => setActiveTab('diary')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'diary' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Apple size={24} className={activeTab === 'diary' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">기록</span>
@@ -969,14 +985,14 @@ export default function App() {
             </button>
           )}
 
-          {currentUser?.role !== 'student' && (
+          {adminMode && (
           <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">랭킹</span>
           </button>
           )}
 
-          {currentUser?.role !== 'student' && (
+          {adminMode && (
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <MessageSquare size={24} className={activeTab === 'requests' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">요청</span>
@@ -1059,6 +1075,22 @@ export default function App() {
                     </>
                   ) : (
                     <p className="text-xs text-slate-500 dark:text-purple-300/70 font-bold">로그인하면 친구와 경쟁하고 기록을 동기화할 수 있어요.</p>
+                  )}
+                </div>
+
+                {/* 과외 관리자 모드 (선생님) */}
+                <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-2 font-bold text-slate-700 dark:text-purple-200"><GraduationCap size={18} className="text-indigo-500"/> 과외 관리자 모드</div>
+                  {adminMode ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300">✅ 선생님 모드 사용 중</span>
+                      <button onClick={() => setAdminMode(false)} className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-purple-800 text-slate-600 dark:text-purple-200 text-sm font-bold hover:opacity-80 transition">학생 화면으로</button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-slate-400 dark:text-purple-400 font-bold mb-2">켜면 학생 목록·보드 관리(선생님 화면)가 열려요. PIN이 필요해요.</p>
+                      <button onClick={async () => { const hasPin = await fetchAdminStatus(); setAdminPinMode(hasPin ? 'enter' : 'setup'); setAdminPin(''); setAdminPinError(''); setShowAdminPin(true); }} className="w-full py-2.5 rounded-xl bg-indigo-500 text-white text-sm font-bold hover:opacity-90 transition">관리자 모드 켜기</button>
+                    </>
                   )}
                 </div>
 
@@ -1182,6 +1214,38 @@ export default function App() {
                     <p className="text-sm text-slate-400 dark:text-purple-300 font-bold mt-1">{getDdayString()} 경과</p>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================= 과외 관리자 PIN 모달 ======================= */}
+        {showAdminPin && (
+          <div className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/40 dark:bg-purple-950/80 backdrop-blur-sm animate-in fade-in duration-200 p-6">
+            <div className="bg-white dark:bg-purple-900 rounded-3xl p-6 shadow-2xl w-full max-w-xs animate-in zoom-in-95 duration-200">
+              <div className="text-3xl mb-2 text-center">🔐</div>
+              <h2 className="text-lg font-black text-center text-slate-700 dark:text-purple-100 mb-1">
+                {adminPinMode === 'setup' ? '관리자 PIN 설정' : '관리자 PIN 입력'}
+              </h2>
+              <p className="text-[11px] text-slate-400 dark:text-purple-400 font-bold text-center mb-4">
+                {adminPinMode === 'setup'
+                  ? '앞으로 선생님 모드를 켤 때 쓸 4~12자리 숫자를 정해주세요.'
+                  : '선생님 모드를 켜려면 PIN을 입력해주세요.'}
+              </p>
+              <input
+                type="password" inputMode="numeric" maxLength={12}
+                value={adminPin} onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter') submitAdminPin(); }}
+                placeholder="PIN 4~12자리"
+                className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-center text-lg font-black tracking-[0.5em] outline-none focus:ring-2 focus:ring-indigo-500 transition mb-2"
+                autoFocus
+              />
+              {adminPinError && <p className="text-xs font-bold text-rose-500 text-center mb-2">{adminPinError}</p>}
+              <div className="flex gap-2">
+                <button onClick={() => { setShowAdminPin(false); setAdminPin(''); setAdminPinError(''); }} className="flex-1 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300 hover:opacity-80">취소</button>
+                <button onClick={submitAdminPin} disabled={adminPinBusy} className="flex-1 py-3 rounded-xl font-bold text-sm bg-indigo-500 text-white hover:opacity-90 disabled:opacity-50">
+                  {adminPinBusy ? '확인 중...' : adminPinMode === 'setup' ? '설정하기' : '켜기'}
+                </button>
               </div>
             </div>
           </div>
