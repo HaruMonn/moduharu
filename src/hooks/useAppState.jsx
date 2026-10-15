@@ -285,6 +285,17 @@ export function useAppState() {
   const [authNickname, setAuthNickname] = useState('');
   const [authError, setAuthError] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
+  const [authRole, setAuthRole] = useState('student'); // 'student' | 'teacher'
+  const [sessionToken, setSessionToken] = useState(() => localStorage.getItem('lifestyle_token') || '');
+
+  // =================== [과외 모드 상태] ===================
+  const [tutorStudents, setTutorStudents] = useState([]); // [{code, nickname}]
+  const [tutorBoard, setTutorBoard] = useState(null); // {code, nickname, board}
+  const [tutorRecords, setTutorRecords] = useState([]); // 선택된 학생의 공부 기록
+  const [tutorLoading, setTutorLoading] = useState(false);
+  const [tutorError, setTutorError] = useState('');
+  const [tutorStudentCodeInput, setTutorStudentCodeInput] = useState('');
+  const [tutorView, setTutorView] = useState('home'); // 'home' | 'student'
   const [friends, setFriends] = useState([]); // {code, nickname}[]
   const [friendRequests, setFriendRequests] = useState([]); // 받은 친구 요청 {fromCode, fromNickname, at}[]
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -354,12 +365,13 @@ export function useAppState() {
       const res = await fetch(`${API_BASE}/users/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, password: pw, nickname: nick })
+        body: JSON.stringify({ id, password: pw, nickname: nick, role: authRole })
       });
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || '가입에 실패했어요.'); setAuthBusy(false); return; }
       localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
       setCurrentUser(data.user);
+      if (data.token) { localStorage.setItem('lifestyle_token', data.token); setSessionToken(data.token); }
       setAuthBusy(false);
       setAuthId(''); setAuthPassword(''); setAuthPasswordConfirm(''); setAuthNickname('');
     } catch (err) {
@@ -387,6 +399,7 @@ export function useAppState() {
       if (!res.ok) { setAuthError(data.error || '로그인에 실패했어요.'); setAuthBusy(false); return; }
       localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
       setCurrentUser(data.user);
+      if (data.token) { localStorage.setItem('lifestyle_token', data.token); setSessionToken(data.token); }
       setAuthBusy(false);
       setAuthId(''); setAuthPassword('');
     } catch (err) {
@@ -397,10 +410,152 @@ export function useAppState() {
   };
 
   // ---- 로그아웃 ----
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (currentUser?.code && sessionToken) {
+        await fetch(`${API_BASE}/users/logout`, {
+          method: 'POST',
+          headers: { 'x-user-code': currentUser.code, 'x-session-token': sessionToken },
+        });
+      }
+    } catch (e) { console.error(e); }
     localStorage.removeItem('lifestyle_user');
+    localStorage.removeItem('lifestyle_token');
     setCurrentUser(null);
+    setSessionToken('');
+    setTutorStudents([]); setTutorBoard(null); setTutorRecords([]); setTutorView('home');
   };
+
+  // =================== [과외 모드 API] ===================
+  const tutorFetch = async (path, options = {}) => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-code': currentUser?.code || '',
+        'x-session-token': sessionToken,
+        ...(options.headers || {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || '요청에 실패했어요.');
+    return data;
+  };
+
+  const refreshMyUser = async () => {
+    try {
+      const data = await tutorFetch('/tutor/me');
+      localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
+      setCurrentUser(data.user);
+      return data.user;
+    } catch (e) { console.error(e); return null; }
+  };
+
+  const setMyTutorRole = async (role) => {
+    try {
+      const data = await tutorFetch('/tutor/role', { method: 'POST', body: JSON.stringify({ role }) });
+      localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
+      setCurrentUser(data.user);
+    } catch (e) { alert(e.message); }
+  };
+
+  const fetchTutorStudents = async () => {
+    setTutorLoading(true); setTutorError('');
+    try {
+      const data = await tutorFetch('/tutor/students');
+      setTutorStudents(data.students || []);
+    } catch (e) { setTutorError(e.message); }
+    finally { setTutorLoading(false); }
+  };
+
+  const registerTutorStudent = async () => {
+    const code = tutorStudentCodeInput.trim();
+    if (!code) { setTutorError('학생 코드를 입력해주세요.'); return; }
+    setTutorLoading(true); setTutorError('');
+    try {
+      const data = await tutorFetch('/tutor/students', { method: 'POST', body: JSON.stringify({ studentCode: code }) });
+      setTutorStudents(data.students || []);
+      setTutorStudentCodeInput('');
+    } catch (e) { setTutorError(e.message); }
+    finally { setTutorLoading(false); }
+  };
+
+  const unregisterTutorStudent = async (code) => {
+    if (!window.confirm('이 학생의 등록을 해제할까요?')) return;
+    try {
+      const data = await tutorFetch(`/tutor/students/${encodeURIComponent(code)}`, { method: 'DELETE' });
+      setTutorStudents(data.students || []);
+      if (tutorBoard?.code === code) { setTutorBoard(null); setTutorRecords([]); setTutorView('home'); }
+    } catch (e) { alert(e.message); }
+  };
+
+  const openTutorBoard = async (code) => {
+    setTutorLoading(true); setTutorError('');
+    try {
+      const [b, r] = await Promise.all([
+        tutorFetch(`/tutor/board/${encodeURIComponent(code)}`),
+        tutorFetch(`/tutor/records/${encodeURIComponent(code)}?days=30`),
+      ]);
+      setTutorBoard({ code: b.code, nickname: b.nickname, board: b.board });
+      setTutorRecords(r.records || []);
+      setTutorView('student');
+    } catch (e) { setTutorError(e.message); }
+    finally { setTutorLoading(false); }
+  };
+
+  const saveTutorBoard = async (board) => {
+    if (!tutorBoard) return;
+    setTutorLoading(true); setTutorError('');
+    try {
+      const data = await tutorFetch(`/tutor/board/${encodeURIComponent(tutorBoard.code)}`, {
+        method: 'PUT', body: JSON.stringify({ board }),
+      });
+      setTutorBoard({ ...tutorBoard, board: data.board });
+    } catch (e) { setTutorError(e.message); }
+    finally { setTutorLoading(false); }
+  };
+
+  const fetchMyBoard = async () => {
+    if (!currentUser?.code) return;
+    setTutorLoading(true); setTutorError('');
+    try {
+      const me = await refreshMyUser();
+      const code = me?.code || currentUser.code;
+      const b = await tutorFetch(`/tutor/board/${encodeURIComponent(code)}`);
+      setTutorBoard({ code: b.code, nickname: b.nickname, board: b.board });
+    } catch (e) { setTutorError(e.message); }
+    finally { setTutorLoading(false); }
+  };
+
+  // 학생: 공부 기록을 서버에 동기화 (선생님이 볼 수 있게)
+  const syncStudyRecords = async () => {
+    if (currentUser?.role !== 'student' || !currentUser?.teacherCode || !sessionToken) return;
+    try {
+      await fetch(`${API_BASE}/tutor/records`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-code': currentUser.code,
+          'x-session-token': sessionToken,
+        },
+        body: JSON.stringify({
+          records: studyRecords.map((r) => ({
+            id: r.id, title: r.title,
+            startTime: new Date(r.startTime).toISOString(),
+            endTime: new Date(r.endTime).toISOString(),
+            duration: r.duration, color: r.color,
+          })),
+        }),
+      });
+    } catch (e) { console.error('공부 기록 동기화 실패', e); }
+  };
+
+  useEffect(() => {
+    if (currentUser?.role !== 'student' || !currentUser?.teacherCode || !sessionToken) return;
+    const t = setTimeout(() => { syncStudyRecords(); }, 8000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyRecords, currentUser, sessionToken]);
 
   // ---- 알림 상태 (뽀모도로/친구 요청 폴링에서 사용하므로 먼저 선언) ----
   const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem('lifestyle_notif_enabled') === 'true');
@@ -1179,7 +1334,7 @@ export function useAppState() {
       if (perm === 'granted') {
         setNotifEnabled(true);
         localStorage.setItem('lifestyle_notif_enabled', 'true');
-        new Notification('🌤️ 모두의 하루', { body: '알림이 활성화되었습니다!' });
+        new Notification('🌤️ 모두의 과외', { body: '알림이 활성화되었습니다!' });
       } else if (perm === 'denied') {
         // 사용자가 거부한 경우, 브라우저 설정 안내
         alert('알림이 브라우저에서 차단되어 있습니다.\n브라우저 주소창 왼쪽의 자물쇠(🔒) 아이콘을 눌러 "알림" 권한을 허용으로 바꿔주세요.');
@@ -1395,7 +1550,7 @@ export function useAppState() {
       canvas.toBlob((blob) => {
         const file = new File([blob], 'today-record-stats.png', { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file], title: '🌤️ 모두의 하루', text: '오늘도 열심히 집중했어요! 💪' })
+          navigator.share({ files: [file], title: '🌤️ 모두의 과외', text: '오늘도 열심히 집중했어요! 💪' })
             .catch(() => { /* 사용자가 취소 */ });
         } else {
           const link = document.createElement('a');
@@ -1426,12 +1581,17 @@ export function useAppState() {
     getScoreBreakdown, fetchRankings, submitMyScore, currentUser, setCurrentUser, authMode,
     setAuthMode, authId, setAuthId, authPassword, setAuthPassword, authPasswordConfirm,
     setAuthPasswordConfirm, authNickname, setAuthNickname, authError, setAuthError, authBusy,
-    setAuthBusy, friends, setFriends, friendRequests, setFriendRequests, friendCodeInput,
+    setAuthBusy, authRole, setAuthRole, sessionToken, setSessionToken, refreshMyUser,
+    friends, setFriends, friendRequests, setFriendRequests, friendCodeInput,
     setFriendCodeInput, announcements, setAnnouncements, showNotif, setShowNotif, announceTitle,
     setAnnounceTitle, announceBody, setAnnounceBody, lastSeenAnnounce, setLastSeenAnnounce, isAdmin,
     setIsAdmin, adminToken, setAdminToken, adminTokenInput, setAdminTokenInput, NICKNAME_PATTERN,
     verifyAdmin, logoutAdmin, handleSignup, handleLogin, handleLogout, fetchFriends,
     addFriend, acceptFriend, rejectFriend, removeFriend, fetchAnnouncements, addAnnouncement, deleteAnnouncement,
+    setMyTutorRole, fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
+    openTutorBoard, saveTutorBoard, fetchMyBoard, syncStudyRecords,
+    tutorStudents, tutorBoard, tutorRecords, tutorLoading, tutorError, setTutorError,
+    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
     setFormTitle, formStart, setFormStart, formEnd, setFormEnd, formColor,
