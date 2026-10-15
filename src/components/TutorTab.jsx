@@ -209,9 +209,9 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
 
 export default function TutorTab({
   currentUser, events, studyRecords, decimalToTime, timeToDecimal, setActiveTab, renderHeader,
-  tutorStudents, tutorBoard, tutorRecords, tutorLoading, tutorError,
+  tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
   tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
-  setMyTutorRole, registerTutorStudent, unregisterTutorStudent, openTutorBoard, saveTutorBoard,
+  adminMode, registerTutorStudent, unregisterTutorStudent, openTutorBoard, saveTutorBoard, fetchTutorStudents,
 }) {
   const [boardModal, setBoardModal] = useState(null); // {section, item} | null
 
@@ -261,28 +261,17 @@ export default function TutorTab({
 
   return (
   <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
-    {renderHeader('과외', currentUser?.role === 'teacher' ? '학생 관리' : currentUser?.role === 'student' ? '내 보드' : '과외 모드')}
+    {renderHeader('과외', adminMode ? '학생 관리' : '내 보드')}
     <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
       {!currentUser ? (
         <div className="text-center text-slate-400 dark:text-purple-300/70 py-16 text-sm font-bold">
           <div className="text-3xl mb-2">🔒</div>
           로그인하면 과외 모드를 쓸 수 있어요!
         </div>
-      ) : !currentUser.role ? (
-        <div className="bg-white dark:bg-purple-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-purple-800 text-center">
-          <div className="text-3xl mb-2">🎓</div>
-          <h3 className="font-black text-slate-700 dark:text-purple-100 mb-1">역할을 선택해주세요</h3>
-          <p className="text-xs text-slate-400 dark:text-purple-400 font-bold mb-4">선생님은 학생을 등록하고 관리해요.<br />학생은 선생님과 보드를 공유해요.</p>
-          <div className="flex gap-2 mb-4">
-            <button onClick={() => setMyTutorRole('teacher')} className="flex-1 py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white hover:opacity-90">🎓 선생님</button>
-            <button onClick={() => setMyTutorRole('student')} className="flex-1 py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white hover:opacity-90">📚 학생</button>
-          </div>
-          <p className="text-[11px] text-slate-400 font-bold">내 코드: <span className="text-indigo-500">{currentUser.code}</span> — 상대방에게 알려주세요</p>
-        </div>
-      ) : currentUser.role === 'teacher' ? (
+      ) : adminMode ? (
         tutorView === 'student' && tutorBoard ? (
           <>
-            <button onClick={() => setTutorView('home')} className="flex items-center gap-1 text-sm font-bold text-slate-500 dark:text-purple-300 self-start">
+            <button onClick={() => { setTutorView('home'); fetchTutorStudents(); }} className="flex items-center gap-1 text-sm font-bold text-slate-500 dark:text-purple-300 self-start">
               <ChevronLeft size={16} /> 학생 목록으로
             </button>
             <h2 className="font-black text-xl text-slate-700 dark:text-purple-100">{tutorBoard.nickname} <span className="text-xs text-slate-400 font-bold">({tutorBoard.code})</span></h2>
@@ -367,15 +356,34 @@ export default function TutorTab({
                 <p className="text-xs text-slate-400 font-bold text-center py-3">등록된 학생이 없어요. 위에서 코드를 입력해 등록하세요.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {tutorStudents.map((s) => (
-                    <div key={s.code} className="flex items-center gap-2 bg-slate-50 dark:bg-purple-950/60 rounded-2xl px-3 py-2.5">
-                      <button onClick={() => openTutorBoard(s.code)} className="flex-1 text-left">
-                        <p className="text-sm font-bold text-slate-700 dark:text-purple-100">{s.nickname}</p>
-                        <p className="text-[11px] text-slate-400 font-bold">{s.code}</p>
+                  {tutorStudents.map((s) => {
+                    const sum = tutorSummaries[s.code];
+                    return (
+                    <div key={s.code} className="bg-slate-50 dark:bg-purple-950/60 rounded-2xl px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openTutorBoard(s.code)} className="flex-1 text-left">
+                          <p className="text-sm font-bold text-slate-700 dark:text-purple-100">{s.nickname} <span className="text-[11px] text-slate-400 font-bold">{s.code}</span></p>
+                        </button>
+                        <button onClick={() => unregisterTutorStudent(s.code)} className="text-slate-300 hover:text-rose-500 p-1"><Trash2 size={16} /></button>
+                      </div>
+                      {sum ? (
+                      <button onClick={() => openTutorBoard(s.code)} className="w-full text-left mt-1.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="text-[11px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 px-2 py-1 rounded-full">이번 주 {sum.weekMinutes}분</span>
+                          <span className="text-[11px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 px-2 py-1 rounded-full">숙제 {sum.homeworkDone}/{sum.homeworkTotal}</span>
+                          {sum.nextClass ? (
+                            <span className="text-[11px] font-bold bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 px-2 py-1 rounded-full">다음 수업 {sum.nextClass.when.slice(5).replace('-', '/')} {decimalToTime(sum.nextClass.start)}</span>
+                          ) : (
+                            <span className="text-[11px] font-bold bg-slate-100 dark:bg-purple-800 text-slate-400 px-2 py-1 rounded-full">수업 일정 없음</span>
+                          )}
+                        </div>
                       </button>
-                      <button onClick={() => unregisterTutorStudent(s.code)} className="text-slate-300 hover:text-rose-500 p-1"><Trash2 size={16} /></button>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 font-bold mt-1">요약 불러오는 중...</p>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

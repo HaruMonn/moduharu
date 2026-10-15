@@ -245,11 +245,10 @@ app.post('/api/users/signup', async (req, res) => {
     while (existingCodes.has(code.toLowerCase())) code = generateUserCode();
 
     const hashed = await hashPasswordSecure(password);
-    const cleanRole = req.body?.role === 'teacher' ? 'teacher' : 'student';
     const newUser = {
       id: cleanId, password: hashed, nickname: cleanNickname, code,
       friends: [], friendRequests: [], createdAt: new Date().toISOString(),
-      role: cleanRole, teacherCode: null, studentCodes: [],
+      role: 'student', teacherCode: null, studentCodes: [],
       board: { timetable: [], schedule: [], homework: [] }, studyRecords: [], sessions: [],
     };
     users.push(newUser);
@@ -713,19 +712,38 @@ app.get('/api/tutor/me', requireSession, async (req, res) => {
   }
 });
 
-// ---- 내 역할 설정 (선생님/학생) ----
-app.post('/api/tutor/role', requireSession, async (req, res) => {
+// ---- 관리자 모드 상태 (PIN 설정 여부) ----
+app.get('/api/tutor/admin/status', requireSession, async (req, res) => {
   try {
-    const { role } = req.body || {};
-    if (role !== 'teacher' && role !== 'student') return res.status(400).json({ error: '역할을 선택해주세요.' });
+    const record = await readBin(USERS_BIN);
+    res.json({ hasPin: !!(record.tutorAdmin && record.tutorAdmin.pinHash) });
+  } catch {
+    res.status(500).json({ error: '상태 조회에 실패했어요.' });
+  }
+});
+
+// ---- 관리자 모드 활성화 (PIN 설정/확인 → 이 계정을 선생님으로 승격) ----
+app.post('/api/tutor/admin/activate', requireSession, async (req, res) => {
+  try {
+    const pin = String(req.body?.pin || '').trim();
+    if (!/^\d{4,12}$/.test(pin)) return res.status(400).json({ error: 'PIN은 4~12자리 숫자여야 해요.' });
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
-    const updated = users.map((u) => (sameCode(u.code, req.me.code) ? { ...withTutorDefaults(u), role } : u));
-    await writeBin(USERS_BIN, { ...record, users: updated });
+    const admin = record.tutorAdmin || {};
+    const pinHash = hashToken(`tutor-admin-pin:${pin}`);
+    let isNewPin = false;
+    if (admin.pinHash) {
+      if (admin.pinHash !== pinHash) return res.status(403).json({ error: 'PIN이 올바르지 않아요.' });
+    } else {
+      admin.pinHash = pinHash; // 최초 1회: PIN 등록
+      isNewPin = true;
+    }
+    const updated = users.map((u) => (sameCode(u.code, req.me.code) ? { ...withTutorDefaults(u), role: 'teacher' } : u));
+    await writeBin(USERS_BIN, { ...record, tutorAdmin: admin, users: updated });
     const me = findUserByCode(updated, req.me.code);
-    res.json({ user: publicUser(me) });
+    res.json({ user: publicUser(me), isNewPin });
   } catch {
-    res.status(500).json({ error: '역할 설정에 실패했어요.' });
+    res.status(500).json({ error: '관리자 모드 활성화에 실패했어요.' });
   }
 });
 
@@ -790,6 +808,67 @@ app.delete('/api/tutor/students/:code', requireSession, async (req, res) => {
     res.json({ students: studentListOf(updated, req.me.code) });
   } catch {
     res.status(500).json({ error: '등록 해제에 실패했어요.' });
+  }
+});
+
+// ---- 학생 요약 목록 (선생님 대시보드용: 주간 공부/숙제/다음 수업) ----
+app.get('/api/tutor/students/summary', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 조회할 수 있어요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const now = Date.now();
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const kstNow = new Date(now + 9 * 60 * 60 * 1000); // KST 벽시계
+    const kstDayKey = kstNow.toISOString().slice(0, 10);
+    const kstDow = kstNow.getUTCDay();
+    const kstHour = kstNow.getUTCHours() + kstNow.getUTCMinutes() / 60;
+    const recDayKey = (r) => new Date(new Date(r.startTime).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    // 스케줄 항목의 다음 발생 시점 (KST 기준)
+    const nextOccurrence = (s) => {
+      const start = Number(s.start);
+      const end = Number(s.end);
+      if (!(start >= 0) || !(end > start) || end > 24) return null;
+      if (s.date) {
+        if (s.date < kstDayKey) return null;
+        if (s.date === kstDayKey && end <= kstHour) return null;
+        return { title: s.title, when: s.date, start, end, ts: Date.parse(`${s.date}T00:00:00+09:00`) + start * 3600e3 };
+      }
+      const day = Number(s.day);
+      if (!(day >= 0 && day <= 6)) return null;
+      let delta = (day - kstDow + 7) % 7;
+      if (delta === 0 && end <= kstHour) delta = 7;
+      const d = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate() + delta));
+      return { title: s.title, when: d.toISOString().slice(0, 10), start, end, ts: d.getTime() + start * 3600e3 };
+    };
+
+    const students = users
+      .filter((u) => String(u.teacherCode || '').toLowerCase() === String(req.me.code).toLowerCase())
+      .map((u) => {
+        const v = withTutorDefaults(u);
+        const recs = v.studyRecords || [];
+        const weekMinutes = Math.round(recs.filter((r) => new Date(r.startTime).getTime() >= weekAgo).reduce((a, r) => a + (Number(r.duration) || 0), 0) / 60);
+        const todayMinutes = Math.round(recs.filter((r) => recDayKey(r) === kstDayKey).reduce((a, r) => a + (Number(r.duration) || 0), 0) / 60);
+        const hw = v.board.homework || [];
+        let nextClass = null;
+        for (const s of v.board.schedule || []) {
+          const occ = nextOccurrence(s);
+          if (occ && (!nextClass || occ.ts < nextClass.ts)) nextClass = occ;
+        }
+        return {
+          code: v.code,
+          nickname: v.nickname,
+          weekMinutes,
+          todayMinutes,
+          homeworkTotal: hw.length,
+          homeworkDone: hw.filter((h) => h.done).length,
+          nextClass: nextClass ? { title: nextClass.title, when: nextClass.when, start: nextClass.start, end: nextClass.end } : null,
+        };
+      });
+    res.json({ students });
+  } catch {
+    res.status(500).json({ error: '요약을 불러오지 못했어요.' });
   }
 });
 
