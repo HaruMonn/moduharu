@@ -71,11 +71,12 @@ const verifyPasswordSecure = async (pw, hash) => {
   }
 };
 
-// 응답에서 비밀번호를 제외한 사용자 객체 반환
+// 응답에서 비밀번호/세션을 제외한 사용자 객체 반환
 const publicUser = (u) => {
   if (!u) return u;
   const rest = { ...u };
   delete rest.password;
+  delete rest.sessions;
   return rest;
 };
 
@@ -244,10 +245,17 @@ app.post('/api/users/signup', async (req, res) => {
     while (existingCodes.has(code.toLowerCase())) code = generateUserCode();
 
     const hashed = await hashPasswordSecure(password);
-    const newUser = { id: cleanId, password: hashed, nickname: cleanNickname, code, friends: [], friendRequests: [], createdAt: new Date().toISOString() };
+    const cleanRole = req.body?.role === 'teacher' ? 'teacher' : 'student';
+    const newUser = {
+      id: cleanId, password: hashed, nickname: cleanNickname, code,
+      friends: [], friendRequests: [], createdAt: new Date().toISOString(),
+      role: cleanRole, teacherCode: null, studentCodes: [],
+      board: { timetable: [], schedule: [], homework: [] }, studyRecords: [], sessions: [],
+    };
     users.push(newUser);
     await writeBin(USERS_BIN, { ...record, users });
-    res.json({ user: publicUser(newUser) });
+    const token = await createSession(newUser);
+    res.json({ user: publicUser(newUser), token });
   } catch {
     res.status(500).json({ error: '가입 저장에 실패했어요.' });
   }
@@ -273,12 +281,13 @@ app.post('/api/users/login', async (req, res) => {
     if (!ok) {
       return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않아요.' });
     }
-    if (migrated) {
-      const hashed = await hashPasswordSecure(password);
-      const updated = users.map((u) => (u.id === found.id ? { ...u, password: hashed } : u));
-      await writeBin(USERS_BIN, { ...record, users: updated });
-    }
-    res.json({ user: publicUser(found) });
+    // 과외 모드 기본값 백필 (기존 계정 호환) + 구버전 해시 마이그레이션
+    const finalPassword = migrated ? await hashPasswordSecure(password) : found.password;
+    const fresh = { ...withTutorDefaults(found), password: finalPassword };
+    const finalUsers = users.map((u) => (u.id === found.id ? fresh : u));
+    await writeBin(USERS_BIN, { ...record, users: finalUsers });
+    const token = await createSession(fresh);
+    res.json({ user: publicUser(fresh), token });
   } catch {
     res.status(500).json({ error: '로그인에 실패했어요.' });
   }
@@ -527,6 +536,327 @@ app.post('/api/admin/verify', (req, res) => {
     return res.status(401).json({ error: '관리자 토큰이 올바르지 않아요.' });
   }
   res.json({ ok: true });
+});
+
+// =================== 과외 모드 (선생님/학생) ===================
+// 친구 코드 기반 식별은 학생 간 엿보기를 막기에 약해서, 과외 API는 전부 로그인 세션 토큰을 요구함
+
+const issueSessionToken = () => crypto.randomBytes(32).toString('hex');
+const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+
+// 세션 발급 — 토큰 원문은 이 응답에서만 나가고, 저장되는 건 해시뿐
+async function createSession(user) {
+  const record = await readBin(USERS_BIN);
+  const users = record.users || [];
+  const token = issueSessionToken();
+  const sessions = [...(user.sessions || []), { hash: hashToken(token), createdAt: new Date().toISOString() }].slice(-10);
+  const updated = users.map((u) => (sameCode(u.code, user.code) ? { ...u, sessions } : u));
+  await writeBin(USERS_BIN, { ...record, users: updated });
+  return token;
+}
+
+// 세션 인증 미들웨어 — req.me 에 사용자 원본 세팅
+async function requireSession(req, res, next) {
+  const code = req.get('x-user-code');
+  const token = req.get('x-session-token');
+  if (!code || !token) return res.status(401).json({ error: '로그인이 필요해요.' });
+  try {
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const me = findUserByCode(users, code);
+    const h = hashToken(token);
+    if (!me || !(me.sessions || []).some((s) => s.hash === h)) {
+      return res.status(401).json({ error: '로그인이 만료됐어요. 다시 로그인해주세요.' });
+    }
+    req.me = me;
+    next();
+  } catch {
+    res.status(500).json({ error: '인증 확인에 실패했어요.' });
+  }
+}
+
+// 과외 모드 필드 기본값 (기존 계정 호환용)
+const withTutorDefaults = (u) => {
+  const v = { ...u };
+  if (!v.role) v.role = null;
+  if (!('teacherCode' in v)) v.teacherCode = null;
+  if (!Array.isArray(v.studentCodes)) v.studentCodes = [];
+  if (!v.board || typeof v.board !== 'object') v.board = { timetable: [], schedule: [], homework: [] };
+  else {
+    if (!Array.isArray(v.board.timetable)) v.board.timetable = [];
+    if (!Array.isArray(v.board.schedule)) v.board.schedule = [];
+    if (!Array.isArray(v.board.homework)) v.board.homework = [];
+  }
+  if (!Array.isArray(v.studyRecords)) v.studyRecords = [];
+  if (!Array.isArray(v.sessions)) v.sessions = [];
+  return v;
+};
+
+const isTeacherOf = (teacher, student) =>
+  !!teacher && !!student && teacher.role === 'teacher' &&
+  String(student.teacherCode || '').toLowerCase() === String(teacher.code || '').toLowerCase();
+
+// 학생 본인 또는 담당 선생님만 접근 가능
+const canAccessBoard = (me, student) =>
+  !!student && (sameCode(me.code, student.code) || isTeacherOf(me, student));
+
+const studentListOf = (users, teacherCode) =>
+  users
+    .filter((u) => String(u.teacherCode || '').toLowerCase() === String(teacherCode).toLowerCase())
+    .map((u) => ({ code: u.code, nickname: u.nickname }));
+
+const cleanStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+// 보드 섹션 검증 — timetable | schedule | homework
+function validateBoardSection(items, kind) {
+  if (!Array.isArray(items) || items.length > 300) return null;
+  const out = [];
+  for (const it of items) {
+    if (!it || typeof it !== 'object') return null;
+    const title = cleanStr(it.title, 100);
+    if (!title) return null;
+    const base = {
+      id: it.id ?? Date.now() + Math.floor(Math.random() * 1000),
+      title,
+      color: cleanStr(it.color, 20) || 'indigo',
+      note: cleanStr(it.note, 500),
+    };
+    if (kind === 'timetable') {
+      const day = Number(it.day);
+      const start = Number(it.start);
+      const end = Number(it.end);
+      if (!(day >= 0 && day <= 6) || !(start >= 0) || !(end > start) || end > 24) return null;
+      out.push({ ...base, day, start, end });
+    } else if (kind === 'schedule') {
+      const date = typeof it.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(it.date) ? it.date : null;
+      const day = it.day == null || it.day === '' ? null : Number(it.day);
+      const start = Number(it.start);
+      const end = Number(it.end);
+      if (!(start >= 0) || !(end > start) || end > 24) return null;
+      if (day !== null && !(day >= 0 && day <= 6)) return null;
+      out.push({ ...base, date, day, start, end });
+    } else if (kind === 'homework') {
+      out.push({
+        ...base,
+        subject: cleanStr(it.subject, 40),
+        dueDate: typeof it.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(it.dueDate) ? it.dueDate : null,
+        done: !!it.done,
+        doneAt: it.doneAt || null,
+        createdAt: it.createdAt || new Date().toISOString(),
+      });
+    } else return null;
+  }
+  return out;
+}
+
+// 공부 기록 검증 (랭킹 검증과 같은 원칙: 구간-길이 일치, 미래 거부, 겹침은 날짜별 합산으로)
+function validateStudyRecords(records) {
+  if (!Array.isArray(records)) return { error: '공부 기록이 필요해요.' };
+  if (records.length > 1000) return { error: '기록이 너무 많아요.' };
+  const now = Date.now();
+  const oldest = now - 90 * 24 * 60 * 60 * 1000;
+  const seen = new Set();
+  const perDay = {};
+  const out = [];
+  for (const r of records) {
+    if (!r || typeof r !== 'object') return { error: '기록 형식이 올바르지 않아요.' };
+    const id = String(r.id ?? '');
+    if (!id || seen.has(id)) return { error: '기록 ID가 올바르지 않아요.' };
+    seen.add(id);
+    const start = new Date(r.startTime);
+    const end = new Date(r.endTime);
+    const dur = Number(r.duration);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return { error: '기록 시간이 올바르지 않아요.' };
+    if (!(dur > 0) || !Number.isFinite(dur)) return { error: '기록 길이가 올바르지 않아요.' };
+    if (end <= start) return { error: '기록 시간이 올바르지 않아요.' };
+    if (Math.abs((end - start) / 1000 - dur) > 120) return { error: '기록 길이가 올바르지 않아요.' };
+    if (start.getTime() > now) return { error: '미래의 기록은 등록할 수 없어요.' };
+    if (start.getTime() < oldest) continue; // 90일 이전은 조용히 제외
+    const dayKey = new Date(start.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    perDay[dayKey] = (perDay[dayKey] || 0) + dur;
+    if (perDay[dayKey] > 24 * 3600) return { error: '하루 24시간을 초과할 수 없어요.' };
+    out.push({
+      id,
+      title: cleanStr(r.title, 100) || '공부',
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      duration: dur,
+      color: cleanStr(r.color, 20) || 'indigo',
+    });
+  }
+  out.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+  return { records: out };
+}
+
+// ---- 로그아웃 (세션 제거) ----
+app.post('/api/users/logout', requireSession, async (req, res) => {
+  try {
+    const h = hashToken(req.get('x-session-token'));
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const updated = users.map((u) =>
+      sameCode(u.code, req.me.code) ? { ...u, sessions: (u.sessions || []).filter((s) => s.hash !== h) } : u
+    );
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: '로그아웃에 실패했어요.' });
+  }
+});
+
+// ---- 내 정보 조회 (역할/담당선생 갱신용) ----
+app.get('/api/tutor/me', requireSession, async (req, res) => {
+  try {
+    res.json({ user: publicUser(withTutorDefaults(req.me)) });
+  } catch {
+    res.status(500).json({ error: '정보를 불러오지 못했어요.' });
+  }
+});
+
+// ---- 내 역할 설정 (선생님/학생) ----
+app.post('/api/tutor/role', requireSession, async (req, res) => {
+  try {
+    const { role } = req.body || {};
+    if (role !== 'teacher' && role !== 'student') return res.status(400).json({ error: '역할을 선택해주세요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const updated = users.map((u) => (sameCode(u.code, req.me.code) ? { ...withTutorDefaults(u), role } : u));
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    const me = findUserByCode(updated, req.me.code);
+    res.json({ user: publicUser(me) });
+  } catch {
+    res.status(500).json({ error: '역할 설정에 실패했어요.' });
+  }
+});
+
+// ---- 학생 등록 (선생님만) ----
+app.post('/api/tutor/students', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 학생을 등록할 수 있어요.' });
+    const studentCode = String(req.body?.studentCode || '').trim();
+    if (!studentCode) return res.status(400).json({ error: '학생 코드를 입력해주세요.' });
+    if (sameCode(studentCode, req.me.code)) return res.status(400).json({ error: '자기 자신은 등록할 수 없어요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const student = findUserByCode(users, studentCode);
+    if (!student) return res.status(404).json({ error: '해당 코드의 사용자를 찾을 수 없어요.' });
+    if (student.teacherCode && !sameCode(student.teacherCode, req.me.code)) {
+      return res.status(409).json({ error: '이미 다른 선생님에게 등록된 학생이에요.' });
+    }
+    const meCode = req.me.code;
+    const updated = users.map((u) => {
+      if (sameCode(u.code, student.code)) return { ...withTutorDefaults(u), teacherCode: meCode };
+      if (sameCode(u.code, meCode)) {
+        const v = withTutorDefaults(u);
+        const codes = v.studentCodes.some((c) => sameCode(c, student.code)) ? v.studentCodes : [...v.studentCodes, student.code];
+        return { ...v, studentCodes: codes };
+      }
+      return u;
+    });
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    res.json({ students: studentListOf(updated, meCode) });
+  } catch {
+    res.status(500).json({ error: '학생 등록에 실패했어요.' });
+  }
+});
+
+// ---- 학생 목록 ----
+app.get('/api/tutor/students', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 조회할 수 있어요.' });
+    const record = await readBin(USERS_BIN);
+    res.json({ students: studentListOf(record.users || [], req.me.code) });
+  } catch {
+    res.status(500).json({ error: '학생 목록을 불러오지 못했어요.' });
+  }
+});
+
+// ---- 학생 등록 해제 ----
+app.delete('/api/tutor/students/:code', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 해제할 수 있어요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const student = findUserByCode(users, req.params.code);
+    if (!student || !isTeacherOf(req.me, student)) return res.status(404).json({ error: '내 학생이 아니에요.' });
+    const updated = users.map((u) => {
+      if (sameCode(u.code, student.code)) return { ...u, teacherCode: null };
+      if (sameCode(u.code, req.me.code)) {
+        return { ...u, studentCodes: (u.studentCodes || []).filter((c) => !sameCode(c, student.code)) };
+      }
+      return u;
+    });
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    res.json({ students: studentListOf(updated, req.me.code) });
+  } catch {
+    res.status(500).json({ error: '등록 해제에 실패했어요.' });
+  }
+});
+
+// ---- 학생 보드 조회 (학생 본인 / 담당 선생님만) ----
+app.get('/api/tutor/board/:code', requireSession, async (req, res) => {
+  try {
+    const record = await readBin(USERS_BIN);
+    const student = findUserByCode(record.users || [], req.params.code);
+    if (!canAccessBoard(req.me, student)) return res.status(403).json({ error: '볼 수 있는 권한이 없어요.' });
+    res.json({ nickname: student.nickname, code: student.code, board: withTutorDefaults(student).board });
+  } catch {
+    res.status(500).json({ error: '보드를 불러오지 못했어요.' });
+  }
+});
+
+// ---- 학생 보드 저장 (학생 본인 / 담당 선생님만) ----
+app.put('/api/tutor/board/:code', requireSession, async (req, res) => {
+  try {
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const student = findUserByCode(users, req.params.code);
+    if (!canAccessBoard(req.me, student)) return res.status(403).json({ error: '수정할 수 있는 권한이 없어요.' });
+    const { board } = req.body || {};
+    const timetable = validateBoardSection(board?.timetable, 'timetable');
+    const schedule = validateBoardSection(board?.schedule, 'schedule');
+    const homework = validateBoardSection(board?.homework, 'homework');
+    if (!timetable || !schedule || !homework) return res.status(400).json({ error: '보드 형식이 올바르지 않아요.' });
+    const updated = users.map((u) =>
+      sameCode(u.code, student.code) ? { ...withTutorDefaults(u), board: { timetable, schedule, homework } } : u
+    );
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    res.json({ ok: true, board: { timetable, schedule, homework } });
+  } catch {
+    res.status(500).json({ error: '보드 저장에 실패했어요.' });
+  }
+});
+
+// ---- 공부 기록 동기화 (학생 본인) ----
+app.post('/api/tutor/records', requireSession, async (req, res) => {
+  try {
+    const v = validateStudyRecords(req.body?.records);
+    if (v.error) return res.status(400).json({ error: v.error });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const updated = users.map((u) =>
+      sameCode(u.code, req.me.code) ? { ...withTutorDefaults(u), studyRecords: v.records } : u
+    );
+    await writeBin(USERS_BIN, { ...record, users: updated });
+    res.json({ ok: true, count: v.records.length });
+  } catch {
+    res.status(500).json({ error: '기록 동기화에 실패했어요.' });
+  }
+});
+
+// ---- 공부 기록 조회 (학생 본인 / 담당 선생님만) ----
+app.get('/api/tutor/records/:code', requireSession, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
+    const record = await readBin(USERS_BIN);
+    const student = findUserByCode(record.users || [], req.params.code);
+    if (!canAccessBoard(req.me, student)) return res.status(403).json({ error: '볼 수 있는 권한이 없어요.' });
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const records = (student.studyRecords || []).filter((r) => new Date(r.startTime).getTime() >= cutoff);
+    res.json({ records });
+  } catch {
+    res.status(500).json({ error: '기록을 불러오지 못했어요.' });
+  }
 });
 
 // =================== 프로덕션 정적 서빙 (Render 등 단일 서비스용) ===================
