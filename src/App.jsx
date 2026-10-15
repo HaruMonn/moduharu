@@ -1,15 +1,18 @@
+import { useEffect } from 'react';
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
-import { COLOR_OPTIONS, TIMER_COLORS } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Timer as TimerIcon } from 'lucide-react';
+import TutorTab from './components/TutorTab.jsx';
+import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS } from './constants.js';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
+
 export default function App() {
   const {
-    activeTab, setActiveTab, selectedDate, setSelectedDate, showStats, setShowStats,
+    activeTab, setActiveTab, showStats, setShowStats,
     showSettings, setShowSettings, showOnboarding, onboardingFade, showPolicy, setShowPolicy,
     showDday, setShowDday, serverUrlInput, setServerUrlInput, currentServerBase, saveServerUrl,
     showSplash, splashFade, videoRef, finishSplash, exitToast, themeColor,
@@ -18,16 +21,21 @@ export default function App() {
     editingDiary, newWeeklyGoal, setNewWeeklyGoal, weeklyReviewGood, setWeeklyReviewGood, weeklyReviewBad,
     setWeeklyReviewBad, weeklyReviewNext, setWeeklyReviewNext, editingReview, requests, requestsLoading,
     requestsError, newRequestTitle, setNewRequestTitle, newRequestBody, setNewRequestBody, newRequestCategory,
-    setNewRequestCategory, rankings, rankingLoading, rankingReady, calcMyScore, submitMyScore,
+    setNewRequestCategory, rankings, rankingLoading, rankingReady, rankingFilter, setRankingFilter, calcMyScore, submitMyScore,
     currentUser, authMode, setAuthMode, authId, setAuthId, authPassword,
     setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, authError,
-    setAuthError, authBusy, friends, friendRequests, friendCodeInput, setFriendCodeInput,
+    setAuthError, authBusy, authRole, setAuthRole, friends, friendRequests, friendCodeInput, setFriendCodeInput,
     announcements, showNotif, setShowNotif, announceTitle, setAnnounceTitle, announceBody,
     setAnnounceBody, isAdmin, adminTokenInput, setAdminTokenInput, verifyAdmin, logoutAdmin,
-    handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend,
-    addAnnouncement, deleteAnnouncement, newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
+    handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend, removeFriend,
+    addAnnouncement, deleteAnnouncement,
+    setMyTutorRole, fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
+    openTutorBoard, saveTutorBoard, fetchMyBoard,
+    tutorStudents, tutorBoard, tutorRecords, tutorLoading, tutorError,
+    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
+    newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
-    setFormStart, formEnd, setFormEnd, formColor, setFormColor, isTimerRunning,
+    setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
     timerSeconds, currentStudy, setCurrentStudy, timerColor, setTimerColor, isPomodoro,
     pomodoroPhase, pomodoroRemaining, pomodoroCount, isWhiteNoiseOn, setIsWhiteNoiseOn, noiseType,
     setNoiseType, isFocusMode, setIsFocusMode, isTimerModalOpen, setIsTimerModalOpen, recordFormTitle,
@@ -39,12 +47,45 @@ export default function App() {
     incGoal, deleteGoal, MOODS, saveDiary, todayDiary, startEditDiary,
     currentWeek, addWeeklyGoal, toggleWeeklyGoal, deleteWeeklyGoal, saveWeeklyReview, startEditReview,
     weekLabel, addRequest, toggleRequestVote, deleteRequest, exportData, importData,
-    notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo,
-    currentHourDecimal, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
-    formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, renderSlotFill,
+    notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo, isDarkMode, setIsDarkMode, currentTime,
+    currentHourDecimal, decimalToTime, timeToDecimal, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
+    formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, timerStartTime,
     renderHeader, todayRecords, getTotalStudySeconds, getComparedToYesterday, getTodoCompletionRate, handleShare,
     doughnutData, barData, captureAndShare,
   } = useAppState();
+
+  // 과외 탭 진입 시 데이터 자동 불러오기
+  useEffect(() => {
+    if (activeTab !== 'tutor' || !currentUser) return;
+    if (currentUser.role === 'student' && !tutorBoard) fetchMyBoard();
+    if (currentUser.role === 'teacher' && tutorView === 'home' && tutorStudents.length === 0) fetchTutorStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // 시간표 표시 범위: 일정이 있는 시간대 ±1시간 (일정 없으면 06:00~24:00)
+  const ttRange = (() => {
+    if (!events.length) return { start: 6, end: 24 };
+    const s = Math.max(0, Math.floor(Math.min(...events.map(e => e.start))) - 1);
+    const e = Math.min(24, Math.ceil(Math.max(...events.map(e => e.end))) + 1);
+    return { start: s, end: Math.max(e, s + 4) };
+  })();
+  const ttHours = ttRange.end - ttRange.start;
+
+  // 오늘의 기록 요약 바: 해당 시간에 활동이 있으면 색상 클래스 반환
+  const hourActivity = (h) => {
+    const now = new Date();
+    const hs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, 0, 0).getTime();
+    const he = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h + 1, 0, 0).getTime();
+    const rec = todayRecords.find(r => r.startTime.getTime() < he && r.endTime.getTime() > hs);
+    if (rec) return rec.color;
+    if (timerStartTime) {
+      const rs = timerStartTime.getTime();
+      const re = isTimerRunning ? currentTime.getTime() : rs + timerSeconds * 1000;
+      if (rs < he && re > hs) return timerColor;
+    }
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-purple-950 text-slate-800 dark:text-purple-50 transition-colors duration-300">
       <div className="max-w-md mx-auto h-screen bg-white dark:bg-purple-900 shadow-sm relative overflow-hidden flex flex-col pt-safe main-content-pad">
@@ -69,15 +110,15 @@ export default function App() {
 
         {/* ======================= 로그인/가입 화면 ======================= */}
         {!currentUser && (
-          <div className="absolute inset-0 z-[95] flex flex-col justify-center bg-slate-50 dark:bg-[#09090b] p-6 overflow-y-auto">
+          <div className="absolute inset-0 z-[95] flex flex-col justify-center bg-slate-50 dark:bg-purple-950 p-6 overflow-y-auto">
             <div className="flex flex-col items-center mb-8">
               <div className="text-5xl mb-3">🌤️</div>
-              <h1 className="text-3xl font-black tracking-tight">모두의 하루</h1>
-              <p className="text-slate-500 dark:text-purple-300 text-sm font-bold mt-1">하루를 알차게 기록하고 성장해요</p>
+              <h1 className="text-3xl font-black tracking-tight">모두의 과외</h1>
+              <p className="text-slate-500 dark:text-purple-300 text-sm font-bold mt-1">시간표·숙제·공부 기록을 함께 관리해요</p>
             </div>
 
             {/* 로그인/가입 토글 */}
-            <div className="flex gap-2 bg-white dark:bg-[#18181b] rounded-2xl p-1.5 border border-slate-100 dark:border-[#27272a] mb-6">
+            <div className="flex gap-2 bg-white dark:bg-purple-900 rounded-2xl p-1.5 border border-slate-100 dark:border-purple-800 mb-6">
               <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${authMode === 'login' ? 'bg-indigo-500 text-white shadow' : 'text-slate-500 dark:text-purple-300'}`}>로그인</button>
               <button onClick={() => { setAuthMode('signup'); setAuthError(''); }} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${authMode === 'signup' ? 'bg-indigo-500 text-white shadow' : 'text-slate-500 dark:text-purple-300'}`}>가입</button>
             </div>
@@ -86,36 +127,43 @@ export default function App() {
               <form onSubmit={handleLogin} className="flex flex-col gap-3">
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">아이디</label>
-                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호</label>
-                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="current-password" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="current-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
                 <button type="submit" disabled={authBusy} className="w-full bg-indigo-500 text-white rounded-xl font-bold py-3.5 hover:opacity-90 transition shadow-md disabled:opacity-50 mt-1">
                   {authBusy ? '로그인 중...' : '로그인'}
                 </button>
-                <p className="text-center text-[11px] text-slate-400 dark:text-purple-400 font-bold">아이디/비밀번호 찾기는 곧 추가될 예정이에요</p>
               </form>
             ) : (
               <form onSubmit={handleSignup} className="flex flex-col gap-3">
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">아이디 <span className="text-slate-400">(영어·숫자 4자 이상)</span></label>
-                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="text" value={authId} onChange={(e) => setAuthId(e.target.value)} placeholder="아이디를 입력하세요" autoComplete="username" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">닉네임 <span className="text-slate-400">(영어·한글·한자·히라가나·특수문자)</span></label>
-                  <input type="text" value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} placeholder="예: 하루몽, はる, 太郎" maxLength={12} className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="text" value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} placeholder="예: 하루몽, はる, 太郎" maxLength={12} className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-1">가입하면 닉네임#0000 형식의 고유 코드가 자동 부여돼요</p>
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 <span className="text-slate-400">(6자 이상)</span></label>
-                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="비밀번호를 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 확인</label>
-                  <input type="password" value={authPasswordConfirm} onChange={(e) => setAuthPasswordConfirm(e.target.value)} placeholder="비밀번호를 다시 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                  <input type="password" value={authPasswordConfirm} onChange={(e) => setAuthPasswordConfirm(e.target.value)} placeholder="비밀번호를 다시 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">역할</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setAuthRole('student')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${authRole === 'student' ? 'bg-indigo-500 text-white shadow' : 'bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300'}`}>📚 학생</button>
+                    <button type="button" onClick={() => setAuthRole('teacher')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${authRole === 'teacher' ? 'bg-indigo-500 text-white shadow' : 'bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300'}`}>🎓 선생님</button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-1">학생은 선생님과 시간표·스케줄·숙제를 공유해요</p>
                 </div>
                 {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
                 <button type="submit" disabled={authBusy} className="w-full bg-indigo-500 text-white rounded-xl font-bold py-3.5 hover:opacity-90 transition shadow-md disabled:opacity-50 mt-1">
@@ -166,7 +214,7 @@ export default function App() {
                             <span className="font-bold text-slate-800 dark:text-purple-50 truncate">{todo.text}</span>
                           </div>
                         </div>
-                        <button onClick={() => deleteTodo(todo.id)} className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
+                        <button onClick={() => deleteTodo(todo.id)} className="opacity-50 hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
                       </div>
                     ))
                   )}
@@ -185,7 +233,7 @@ export default function App() {
                           <span className="font-bold text-slate-500 dark:text-purple-300/70 line-through truncate">{todo.text}</span>
                         </div>
                       </div>
-                      <button onClick={() => deleteTodo(todo.id)} className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
+                      <button onClick={() => deleteTodo(todo.id)} className="opacity-50 hover:opacity-100 p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all shrink-0"><Trash2 size={18} /></button>
                     </div>
                   ))}
                 </div>
@@ -198,45 +246,59 @@ export default function App() {
         {/* ======================= 시간표 화면 ======================= */}
         {activeTab === 'timetable' && (
           <div className="flex flex-col flex-1 min-h-0">
-            {renderHeader('오늘의 일상', `${selectedDate.getMonth()+1}월 ${selectedDate.getDate()}일`)}
-            {/* 주간 달력 네비게이션 (7일 선택) */}
-            <div className="px-4 pt-3 pb-1 flex gap-1 bg-white dark:bg-purple-900">
-              {Array.from({ length: 7 }).map((_, i) => {
-                const d = new Date(selectedDate);
-                d.setDate(selectedDate.getDate() - selectedDate.getDay() + i);
-                const isSel = d.toDateString() === selectedDate.toDateString();
-                const isToday = d.toDateString() === new Date().toDateString();
-                const dow = ['일','월','화','수','목','금','토'][d.getDay()];
-                return (
-                  <button key={i} onClick={() => setSelectedDate(d)} className={`flex-1 flex flex-col items-center py-2 rounded-xl transition ${isSel ? 'bg-indigo-500 text-white shadow' : 'hover:bg-slate-100 dark:hover:bg-purple-800'}`}>
-                    <span className={`text-[10px] font-bold ${isSel ? 'text-indigo-100' : 'text-slate-400 dark:text-purple-300'}`}>{dow}</span>
-                    <span className={`text-sm font-black ${isSel ? '' : (isToday ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100')}`}>{d.getDate()}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="relative px-4 py-6 flex-1 overflow-y-auto">
-              <div className="absolute inset-0 flex">
-                <div className="w-16"></div>
-                <div className="flex-1 border-l border-slate-100 dark:border-purple-800 relative">
-                  {Array.from({ length: 24 }).map((_, i) => ( <div key={i} className="h-16 border-b border-slate-100 dark:border-purple-800/50 w-full" /> ))}
-                </div>
+            {renderHeader('주간 시간표', '일~토 요일별')}
+            {/* 요일 헤더 */}
+            <div className="px-2 pt-2 pb-1 flex bg-white dark:bg-purple-900 shrink-0">
+              <div className="w-10 shrink-0"></div>
+              <div className="flex-1 grid grid-cols-7 gap-1">
+                {DAY_LABELS.map((dow, i) => {
+                  const isToday = i === new Date().getDay();
+                  return (
+                    <div key={i} className={`text-center py-1.5 rounded-lg text-xs font-black ${isToday ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{dow}</div>
+                  );
+                })}
               </div>
-              <div className="relative h-[1536px]">
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <div key={i} className="absolute w-full flex items-start" style={{ top: `${i * 4}rem`, marginTop: '-0.6rem' }}>
-                    <span className="text-xs font-bold text-slate-400 dark:text-purple-300 w-12 text-right pr-3">{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</span>
-                  </div>
-                ))}
-                <div className="absolute top-0 left-16 right-2 bottom-0">
-                  {events.map((event) => (
-                    <div key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 p-3 rounded-2xl backdrop-blur-sm transition-all hover:scale-[1.02] shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${event.start * 4}rem`, height: `${(event.end - event.start) * 4}rem` }}>
-                      <h3 className="font-bold text-[14px] leading-tight overflow-hidden text-ellipsis">{event.title}</h3>
+            </div>
+            {/* 시간 그리드 (일정 있는 시간대만 표시) */}
+            <div className="flex-1 overflow-y-auto px-2 pt-3 pb-4">
+              <div className="flex">
+                {/* 시간축 라벨 */}
+                <div className="w-10 shrink-0 relative" style={{ height: `${ttHours * 56}px` }}>
+                  {Array.from({ length: ttHours + 1 }).map((_, i) => (
+                    <div key={i} className="absolute right-1 -translate-y-1/2" style={{ top: `${i * 56}px` }}>
+                      <span className="text-[8px] font-bold text-slate-400 dark:text-purple-300">{String(ttRange.start + i).padStart(2, '0')}:00</span>
                     </div>
                   ))}
-                  <div className="absolute left-0 right-0 z-10 flex items-center -ml-2 transition-all duration-1000" style={{ top: `${currentHourDecimal * 4}rem` }}>
-                    <div className="w-2 h-2 rounded-full bg-red-500"></div><div className="h-0.5 bg-red-500/50 flex-1 shadow-sm"></div>
-                  </div>
+                </div>
+                {/* 7개 요일 컬럼 */}
+                <div className="flex-1 grid grid-cols-7 gap-1">
+                  {DAY_LABELS.map((dow, i) => {
+                    const isToday = i === new Date().getDay();
+                    const dayEvents = events.filter((e) => e.day === i);
+                    return (
+                      <div key={i} className="relative" style={{ height: `${ttHours * 56}px` }}>
+                        {Array.from({ length: ttHours }).map((_, h) => (
+                          <div key={h} className="absolute left-0 right-0 border-b border-slate-100 dark:border-purple-800/40" style={{ top: `${h * 56}px`, height: '56px' }}></div>
+                        ))}
+                        {isToday && currentHourDecimal >= ttRange.start && currentHourDecimal <= ttRange.end && (
+                          <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top: `${(currentHourDecimal - ttRange.start) * 56}px` }}>
+                            <div className="h-0.5 bg-red-400/70"></div>
+                          </div>
+                        )}
+                        {dayEvents.map((event) => {
+                          const top = (event.start - ttRange.start) * 56;
+                          const height = Math.max((event.end - event.start) * 56, 22);
+                          const showTime = (event.end - event.start) >= 1;
+                          return (
+                            <button key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 rounded-md px-1 py-0.5 text-left overflow-hidden active:scale-95 shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${top}px`, height: `${height}px` }}>
+                              <div className="text-[9px] font-bold leading-tight break-words">{event.title}</div>
+                              {showTime && <div className="text-[8px] font-bold opacity-70 leading-none mt-0.5">{decimalToTime(event.start)}-{decimalToTime(event.end)}</div>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -258,7 +320,7 @@ export default function App() {
               {/* 타이머 카드 (집중 모드에서는 이것만 남김) */}
               <div className={`shrink-0 flex flex-col items-center py-8 px-4 bg-white dark:bg-purple-900 rounded-3xl shadow-sm border border-slate-100 dark:border-purple-800 relative ${isFocusMode && isTimerRunning ? 'py-16' : ''}`}>
                 {(isPomodoro && !isTimerRunning) && <div className="text-sm font-bold text-rose-500 mb-4 bg-rose-50 dark:bg-rose-900/30 px-4 py-2 rounded-full">{pomodoroPhase === 'focus' ? '25분 집중' : '5분 휴식'} 모드 🍅</div>}
-                {(!isPomodoro && !isTimerRunning && timerSeconds === 0) && ( <div className="text-sm font-bold text-slate-400 dark:text-purple-300/70 mb-4 bg-slate-50 dark:bg-purple-800/30 px-4 py-2 rounded-full"> 측정할 카테고리와 색상을 골라주세요 👇 </div> )}
+                {(!isPomodoro && !isTimerRunning && timerSeconds === 0) && ( <div className="text-sm font-bold text-slate-400 dark:text-purple-300/70 mb-4 bg-slate-50 dark:bg-purple-800/30 px-4 py-2 rounded-full"> 카테고리를 입력하세요 👇 </div> )}
                 <input type="text" value={currentStudy} onChange={(e) => setCurrentStudy(e.target.value)} placeholder="예: 리액트 공부" disabled={isTimerRunning} className="bg-transparent text-center text-xl mb-4 outline-none placeholder:text-slate-300 dark:placeholder:text-purple-300/50 border-b-2 border-slate-100 dark:border-purple-800 focus:border-slate-400 dark:focus:border-purple-500 transition-colors py-2 font-bold w-full max-w-[260px]" />
                 <div className={`flex gap-3 mb-6 transition-opacity ${isTimerRunning || isPomodoro ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                   {TIMER_COLORS.map(color => ( <button key={color} onClick={() => setTimerColor(color)} className={`w-7 h-7 rounded-full transition-all duration-200 ${color} ${timerColor === color ? 'ring-4 ring-offset-2 ring-slate-300 dark:ring-purple-400 scale-110 shadow-md' : 'opacity-60 hover:opacity-100'}`} /> ))}
@@ -302,47 +364,38 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 오늘의 기록 + 타임라인 상세 나란히 배치 (세로로 길게) */}
+              {/* 오늘의 기록: 하루 요약 바 */}
               <div className="shrink-0 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-                <div className="flex gap-4 items-stretch">
-                  {/* 왼쪽: 오늘의 기록 (시간 블록) */}
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100 flex items-center gap-1.5"><TimerIcon size={16}/> 오늘의 기록</h3>
-                    <div className="overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                      <div className="flex gap-[6px] min-w-max px-1">
-                        {Array.from({ length: 24 }).map((_, h) => (
-                          <div key={h} className="flex flex-col gap-1 items-center w-[22px]">
-                            <span className="text-[11px] text-slate-400 dark:text-purple-300/70 font-bold mb-1 tracking-tighter">{h}</span>
-                            {Array.from({ length: 6 }).map((_, m) => ( <div key={m} className="w-full h-[14px] rounded-[4px] relative overflow-hidden bg-slate-100 dark:bg-purple-800/50 shadow-sm">{renderSlotFill(h, m)}</div> ))}
-                          </div>
-                        ))}
+                <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100 flex items-center gap-1.5"><TimerIcon size={16}/> 오늘의 기록</h3>
+                <div className="flex gap-[3px]">
+                  {Array.from({ length: 24 }).map((_, h) => {
+                    const color = hourActivity(h);
+                    return <div key={h} title={`${h}시`} className={`flex-1 h-7 rounded-md ${color || 'bg-slate-100 dark:bg-purple-800/50'}`} />;
+                  })}
+                </div>
+                <div className="flex justify-between mt-1.5 text-[9px] font-bold text-slate-400 dark:text-purple-300/60">
+                  <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+                </div>
+              </div>
+
+              {/* 타임라인 */}
+              <div className="shrink-0 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
+                <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100">타임라인</h3>
+                <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
+                  {studyRecords.length === 0 ? (
+                    <div className="text-center text-slate-400 dark:text-purple-300/50 py-8 text-xs bg-slate-50 dark:bg-purple-950 rounded-xl border border-slate-100 dark:border-purple-800">아직 기록이 없어요.</div>
+                  ) : (
+                    studyRecords.map(record => (
+                      <div key={record.id} onClick={() => openTimerModal(record)} className="bg-slate-50 dark:bg-purple-950 p-3 rounded-xl border border-slate-100 dark:border-purple-800 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform flex flex-col">
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${record.color}`}></div>
+                        <div className="pl-2">
+                          <h4 className="font-bold text-[13px] text-slate-800 dark:text-purple-100 truncate">{record.title}</h4>
+                          <p className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold mt-0.5">{formatTimeHM(record.startTime)} - {formatTimeHM(record.endTime)}</p>
+                          <div className="font-mono text-[11px] font-bold text-slate-600 dark:text-purple-200 mt-1">{formatTimerDisplay(record.duration)}</div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* 세로 구분선 */}
-                  <div className="w-px bg-slate-100 dark:bg-purple-800 self-stretch shrink-0"></div>
-
-                  {/* 오른쪽: 타임라인 상세 (세로 긴 목록) */}
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <h3 className="font-bold text-sm mb-3 text-slate-700 dark:text-purple-100">타임라인</h3>
-                    <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
-                      {studyRecords.length === 0 ? (
-                        <div className="text-center text-slate-400 dark:text-purple-300/50 py-8 text-xs bg-slate-50 dark:bg-purple-950 rounded-xl border border-slate-100 dark:border-purple-800">아직 기록이 없어요.</div>
-                      ) : (
-                        studyRecords.map(record => (
-                          <div key={record.id} onClick={() => openTimerModal(record)} className="bg-slate-50 dark:bg-purple-950 p-3 rounded-xl border border-slate-100 dark:border-purple-800 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform flex flex-col">
-                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${record.color}`}></div>
-                            <div className="pl-2">
-                              <h4 className="font-bold text-[13px] text-slate-800 dark:text-purple-100 truncate">{record.title}</h4>
-                              <p className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold mt-0.5">{formatTimeHM(record.startTime)} - {formatTimeHM(record.endTime)}</p>
-                              <div className="font-mono text-[11px] font-bold text-slate-600 dark:text-purple-200 mt-1">{formatTimerDisplay(record.duration)}</div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -603,7 +656,7 @@ export default function App() {
                     />
                     <input type="text" value={newRequestTitle} onChange={(e) => setNewRequestTitle(e.target.value)} placeholder="제목을 입력하세요" className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   </div>
-                  <textarea value={newRequestBody} onChange={(e) => setNewRequestBody(e.target.value)} placeholder="어떤 기능이 필요하신가요? 자세히 적어주실수록 더 잘 반영할 수 있어요." rows={3} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold resize-none" />
+                  <textarea value={newRequestBody} onChange={(e) => setNewRequestBody(e.target.value)} placeholder="필요한 기능을 적어주세요." rows={3} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold resize-none" />
                   <button type="submit" disabled={!newRequestTitle.trim() || !newRequestBody.trim()} className="w-full bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-3 hover:opacity-90 transition shadow-md disabled:opacity-50 disabled:shadow-none">의견 보내기</button>
                 </form>
               </div>
@@ -648,14 +701,33 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
 
+        {/* ======================= 과외 탭 ======================= */}
+        {activeTab === 'tutor' && (
+          <TutorTab
+            currentUser={currentUser} events={events} studyRecords={studyRecords}
+            decimalToTime={decimalToTime} timeToDecimal={timeToDecimal} setActiveTab={setActiveTab}
+            renderHeader={renderHeader}
+            tutorStudents={tutorStudents} tutorBoard={tutorBoard} tutorRecords={tutorRecords}
+            tutorLoading={tutorLoading} tutorError={tutorError}
+            tutorStudentCodeInput={tutorStudentCodeInput} setTutorStudentCodeInput={setTutorStudentCodeInput}
+            tutorView={tutorView} setTutorView={setTutorView}
+            setMyTutorRole={setMyTutorRole} registerTutorStudent={registerTutorStudent}
+            unregisterTutorStudent={unregisterTutorStudent} openTutorBoard={openTutorBoard}
+            saveTutorBoard={saveTutorBoard}
+          />
+        )}
+
+        {/* ======================= 랭킹 탭 ======================= */}
+        {activeTab === 'ranking' && (
+          <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
+            {renderHeader('친구 랭킹', `내 집중 ${calcMyScore()}분`)}
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
               {/* ===== 친구와 경쟁 (랭킹) ===== */}
               <div className="shrink-0 mb-4 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-sm text-slate-700 dark:text-purple-100 flex items-center gap-1.5">👥 친구와 경쟁</h3>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-purple-300">내 점수 {calcMyScore()}점</span>
-                </div>
-
                 {!currentUser ? (
                   <div className="text-center text-slate-400 dark:text-purple-300/70 py-8 text-sm">
                     <div className="text-3xl mb-2">🔒</div>
@@ -668,13 +740,13 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {/* 내 프로필 + 점수 등록 */}
+                    {/* 내 프로필 + 기록 등록 */}
                     <div className="flex items-center gap-2 mb-3 bg-slate-50 dark:bg-purple-950 rounded-xl p-3 border border-slate-100 dark:border-purple-800">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-black text-slate-700 dark:text-purple-100 truncate">{currentUser.nickname}<span className="text-slate-400 font-bold">#{currentUser.code}</span></div>
                         <div className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold">내 고유 코드</div>
                       </div>
-                      <button onClick={submitMyScore} className="shrink-0 px-4 py-2 bg-indigo-500 text-white rounded-xl font-bold text-sm shadow hover:opacity-90 transition">점수 등록 🏆</button>
+                      <button onClick={submitMyScore} className="shrink-0 px-4 py-2 bg-indigo-500 text-white rounded-xl font-bold text-sm shadow hover:opacity-90 transition">기록 등록 🏆</button>
                     </div>
 
                     {/* 친구 추가 (코드 기반) */}
@@ -687,33 +759,41 @@ export default function App() {
                     {friends.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-4">
                         {friends.map(f => (
-                          <span key={f.code} className="text-[11px] font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300 px-2.5 py-1 rounded-full border border-sky-100 dark:border-sky-800">{f.nickname}<span className="text-sky-400">#{f.code}</span></span>
+                          <span key={f.code} className="inline-flex items-center gap-1 text-[11px] font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300 pl-2.5 pr-1 py-1 rounded-full border border-sky-100 dark:border-sky-800">{f.nickname}<span className="text-sky-400">#{f.code}</span><button onClick={() => removeFriend(f.code)} className="p-0.5 rounded-full hover:bg-sky-100 dark:hover:bg-sky-800" aria-label={`${f.nickname} 삭제`}><X size={12} /></button></span>
                         ))}
                       </div>
                     )}
+
+                    {/* 랭킹 필터 */}
+                    <div className="flex gap-1.5 mb-3">
+                      {[{ v: 'all', label: '🌍 전체' }, { v: 'friends', label: '👥 친구만' }].map(o => (
+                        <button key={o.v} onClick={() => setRankingFilter(o.v)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${rankingFilter === o.v ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{o.label}</button>
+                      ))}
+                    </div>
 
                     {/* 랭킹 보드 */}
                     <div className="space-y-2">
                       {rankingLoading ? (
                         <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">순위 불러오는 중... ⏳</div>
-                      ) : rankings.length === 0 ? (
-                        <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">아직 등록된 점수가 없어요.<br/>첫 번째로 도전해보세요! 💪</div>
-                      ) : (
-                        rankings.slice(0, 20).map((r, i) => (
+                      ) : (() => {
+                        const friendNicks = new Set(friends.map(f => `${f.nickname}#${f.code}`));
+                        const myNick = currentUser ? `${currentUser.nickname}#${currentUser.code}` : '';
+                        const visible = (rankingFilter === 'friends' ? rankings.filter(r => r.nick === myNick || friendNicks.has(r.nick)) : rankings).slice(0, 20);
+                        if (visible.length === 0) return <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">{rankingFilter === 'friends' ? '친구 중 등록된 기록이 없어요.<br/>친구를 추가하고 기록을 등록해보세요! 🤝' : '아직 등록된 기록이 없어요.<br/>첫 번째로 도전해보세요! 💪'}</div>;
+                        return visible.map((r, i) => (
                           <div key={r.nick + i} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : 'bg-slate-50 dark:bg-purple-950 border border-slate-100 dark:border-purple-800'}`}>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-200 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>
                               {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                             </div>
                             <span className={`flex-1 font-bold text-sm truncate ${r.nick === `${currentUser.nickname}#${currentUser.code}` ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100'}`}>{r.nick}{r.nick === `${currentUser.nickname}#${currentUser.code}` ? ' (나)' : ''}</span>
-                            <span className="font-mono font-black text-sm text-slate-600 dark:text-purple-200">{r.score}점</span>
+                            <span className="font-mono font-black text-sm text-slate-600 dark:text-purple-200">{r.score}분</span>
                           </div>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </div>
                   </>
                 )}
               </div>
-
             </div>
           </div>
         )}
@@ -849,7 +929,7 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="text-center mt-4 text-[10px] font-bold text-indigo-200/50">모두의 하루 · 함께 성장해요 🦊</div>
+                  <div className="text-center mt-4 text-[10px] font-bold text-indigo-200/50">모두의 과외 · 함께 성장해요 🦊</div>
                 </div>
               </div>
             </div>
@@ -876,6 +956,18 @@ export default function App() {
           <button onClick={() => setActiveTab('diary')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'diary' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Apple size={24} className={activeTab === 'diary' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">기록</span>
+          </button>
+
+          {currentUser && (
+            <button onClick={() => setActiveTab('tutor')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'tutor' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+              <GraduationCap size={24} className={activeTab === 'tutor' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+              <span className="text-[10px] font-bold">과외</span>
+            </button>
+          )}
+
+          <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+            <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+            <span className="text-[10px] font-bold">랭킹</span>
           </button>
 
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
@@ -962,16 +1054,15 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 서버 주소 설정 */}
-                <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
-                  <div className="flex items-center gap-2 mb-2 font-bold text-slate-700 dark:text-purple-200"><Server size={18} className="text-sky-500"/> 서버 주소</div>
-                  <p className="text-xs text-slate-500 dark:text-purple-300/70 mb-3 font-bold">PC의 IP를 입력하세요. 와이파이/핫스팟이 바뀌면 여기서 수정하면 돼요.</p>
-                  <div className="flex gap-2">
-                    <input type="text" value={serverUrlInput} onChange={(e) => setServerUrlInput(e.target.value)} placeholder="예: 10.60.30.134:3001" className="flex-1 min-w-0 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                {/* 서버 주소 설정 (고급) */}
+                <details className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
+                  <summary className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200 cursor-pointer list-none"><Server size={18} className="text-sky-500"/> 서버 주소 <span className="text-[10px] font-bold text-slate-400 ml-auto">고급</span></summary>
+                  <div className="flex gap-2 mt-3">
+                    <input type="text" value={serverUrlInput} onChange={(e) => setServerUrlInput(e.target.value)} placeholder="예: 10.60.30.134:3001" className="flex-1 min-w-0 bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                     <button onClick={saveServerUrl} className="shrink-0 px-3 py-2 rounded-xl bg-sky-500 text-white text-sm font-bold hover:opacity-90 transition">저장</button>
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-2">현재: {currentServerBase}</p>
-                </div>
+                </details>
 
                 {/* 관리자 모드 */}
                 <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
@@ -983,11 +1074,20 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <input type="password" value={adminTokenInput} onChange={(e) => setAdminTokenInput(e.target.value)} placeholder="관리자 토큰" className="flex-1 min-w-0 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                      <input type="password" value={adminTokenInput} onChange={(e) => setAdminTokenInput(e.target.value)} placeholder="관리자 토큰" className="flex-1 min-w-0 bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                       <button onClick={verifyAdmin} className="shrink-0 px-3 py-2 rounded-xl bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 text-sm font-bold hover:opacity-90 transition">인증</button>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-2"></p>
+                </div>
+
+                {/* 다크 모드 */}
+                <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200">{isDarkMode ? <Moon size={18} className="text-indigo-500"/> : <Sun size={18} className="text-amber-500"/>} 다크 모드</div>
+                    <button onClick={() => setIsDarkMode(!isDarkMode)} className={`w-12 h-7 rounded-full transition-colors relative ${isDarkMode ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-purple-800'}`}>
+                      <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${isDarkMode ? 'left-6' : 'left-1'}`} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* 테마 색상 커스텀 */}
@@ -1057,8 +1157,7 @@ export default function App() {
                         { label: '일', value: getDdayCountdown().days },
                         { label: '시간', value: getDdayCountdown().hours },
                         { label: '분', value: getDdayCountdown().mins },
-                        { label: '초', value: getDdayCountdown().secs },
-                      ].map((u, i) => (
+                      ].map((u) => (
                         <div key={u.label} className="flex flex-col items-center">
                           <div className="w-16 h-16 bg-slate-900 dark:bg-purple-800 rounded-2xl flex items-center justify-center text-white dark:text-purple-100 text-2xl font-black font-mono tabular-nums shadow-lg">
                             {String(u.value).padStart(2, '0')}
@@ -1067,7 +1166,6 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs text-slate-400 dark:text-purple-300/70 font-bold mt-6">매분 갱신되고 있어요 ⏱️</p>
                   </>
                 ) : (
                   <div className="py-6">
@@ -1092,11 +1190,11 @@ export default function App() {
               <div className="space-y-4 text-sm text-slate-600 dark:text-purple-300 leading-relaxed">
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">1. 개인정보 수집 및 이용</h3>
-                  <p>본 앱은 회원가입이나 개인정보 수집을 하지 않습니다. 모든 데이터(할 일, 시간표, 타이머 기록)는 사용자의 기기 내부(브라우저 로컬 스토리지)에만 저장되며, 외부 서버로 전송되지 않습니다.</p>
+                  <p>회원가입 시 아이디, 비밀번호(암호화되어 저장됩니다), 닉네임을 수집합니다. 친구 코드, 친구 목록, 랭킹 기록, 의견 게시글은 서비스 제공을 위해 서버에 저장됩니다. 할 일, 시간표, 타이머 기록 등 개인 기록은 기본적으로 사용자의 기기 내부(로컬 스토리지)에만 저장되며 서버로 전송되지 않습니다. 단, 과외 모드를 사용하는 학생의 보드(시간표·공유 스케줄·숙제)와 공부 기록은 담당 선생님과의 공유를 위해 서버에 저장됩니다.</p>
                 </section>
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">2. 데이터 보관 및 삭제</h3>
-                  <p>사용자가 앱을 삭제하거나 브라우저 데이터를 삭제하면 모든 기록이 함께 삭제됩니다. 백업 기능을 통해 언제든지 데이터를 내보내거나 복원할 수 있습니다.</p>
+                  <p>기기 내부 데이터는 앱을 삭제하거나 브라우저 데이터를 삭제하면 함께 삭제됩니다. 백업 기능을 통해 언제든지 데이터를 내보내거나 복원할 수 있습니다. 서버에 저장된 계정·친구·랭킹 데이터의 삭제를 원하시면 앱 설정의 문의 채널을 통해 요청할 수 있습니다.</p>
                 </section>
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">3. 알림 권한</h3>
@@ -1116,8 +1214,8 @@ export default function App() {
         {showOnboarding && (
           <div className={`absolute inset-0 z-[96] flex flex-col justify-center items-center bg-white dark:bg-purple-950 p-6 transition-opacity duration-500 ${onboardingFade ? 'opacity-0' : 'opacity-100'}`}>
             <div className="text-6xl mb-6">🎨</div>
-            <h1 className="text-3xl font-black mb-2">모두의 하루</h1>
-            <p className="text-slate-500 dark:text-purple-300 mb-8 text-center font-bold">하루를 알차게 기록하고<br/>성장하는 나를 만나보세요! 🦊</p>
+            <h1 className="text-3xl font-black mb-2">모두의 과외</h1>
+            <p className="text-slate-500 dark:text-purple-300 mb-8 text-center font-bold">하루를 알차게 기록하고<br/>선생님과 함께 성장해요! 🦊</p>
             <div className="space-y-3 w-full mb-8">
               {[
                 { icon: '✅', title: '할 일 관리', desc: '오늘 해야 할 일을 카테고리별로 정리' },
@@ -1141,6 +1239,10 @@ export default function App() {
             <div className="bg-white dark:bg-purple-900 rounded-t-3xl p-6 shadow-2xl pb-[100px] animate-in slide-in-from-bottom-full duration-300">
               <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold">{(editingEvent ? '일정 수정' : '새 일정 추가')}</h2><button onClick={() => setIsModalOpen(false)} className="p-2 bg-slate-100 dark:bg-purple-800 rounded-full hover:bg-slate-200 transition"><X size={20} /></button></div>
               <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">요일</label>
+                  <div className="flex gap-1">{DAY_LABELS.map((dow, i) => ( <button key={i} onClick={() => setFormDay(i)} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition ${formDay === i ? 'bg-indigo-500 text-white shadow' : 'bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300 hover:bg-slate-100 dark:hover:bg-purple-800'}`}>{dow}</button> ))}</div>
+                </div>
                 <div><label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">일정 이름</label><input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="예: 독서, 코딩, 운동..." className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" /></div>
                 <div className="flex gap-4">
                   <div className="flex-1"><label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">시작 시간</label><input type="time" value={formStart} onChange={(e) => setFormStart(e.target.value)} className="w-full bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" /></div>
@@ -1148,7 +1250,7 @@ export default function App() {
                 </div>
                 <div><label className="block text-sm font-bold mb-2 text-slate-500 dark:text-purple-300">테마 색상</label><div className="flex gap-3">{COLOR_OPTIONS.map(opt => ( <button key={opt.value} onClick={() => setFormColor(opt.value)} className={`w-10 h-10 rounded-full transition-all duration-200 ${opt.value.split(' ')[0]} ${formColor === opt.value ? 'ring-2 ring-offset-2 ring-slate-400 dark:ring-purple-400 scale-110 shadow-md' : 'opacity-80 hover:opacity-100 hover:scale-105'}`} /> ))}</div></div>
               </div>
-              <div className="mt-8 flex gap-3"><button onClick={deleteEvent} className="p-4 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 transition"><Trash2 size={20} /></button><button onClick={saveEvent} className="flex-1 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-4 hover:opacity-90 transition shadow-md">저장하기</button></div>
+              <div className="mt-8 flex gap-3">{editingEvent && (<button onClick={deleteEvent} className="p-4 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 transition"><Trash2 size={20} /></button>)}<button onClick={saveEvent} className="flex-1 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold py-4 hover:opacity-90 transition shadow-md">저장하기</button></div>
             </div>
           </div>
         )}
