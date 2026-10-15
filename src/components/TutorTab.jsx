@@ -35,32 +35,47 @@ function WeekChart({ records }) {
 }
 
 // 보드 섹션 (시간표 / 공유 스케줄 / 숙제 목록)
-function BoardSection({ title, emoji, items, onAdd, onEdit, renderMeta, emptyText, onToggle }) {
+function BoardSection({ title, emoji, items, onAdd, onEdit, renderMeta, emptyText, onToggle, allowAdd = true, allowEdit = true }) {
   return (
     <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-black text-slate-700 dark:text-purple-100">{emoji} {title} <span className="text-xs text-slate-400 font-bold">({items.length})</span></h3>
+        {allowAdd && (
         <button onClick={onAdd} className="flex items-center gap-1 text-xs font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/40 px-3 py-1.5 rounded-full hover:opacity-80">
           <Plus size={14} /> 추가
         </button>
+        )}
       </div>
       {items.length === 0 ? (
         <p className="text-xs text-slate-400 dark:text-purple-400 font-bold py-3 text-center">{emptyText}</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {items.map((it) => (
+          {items.map((it) => {
+            const inner = (
+              <>
+                <p className={`text-sm font-bold truncate ${it.done ? 'line-through text-slate-400' : 'text-slate-700 dark:text-purple-100'}`}>{it.title}</p>
+                {renderMeta && <p className="text-[11px] text-slate-400 dark:text-purple-400 font-bold mt-0.5">{renderMeta(it)}</p>}
+              </>
+            );
+            return (
             <div key={it.id} className="flex items-center gap-2 bg-slate-50 dark:bg-purple-950/60 rounded-2xl px-3 py-2.5">
               {onToggle && (
                 <button onClick={() => onToggle(it)} className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center border-2 ${it.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 dark:border-purple-700 text-transparent'}`}>
                   <Check size={14} />
                 </button>
               )}
+              {allowEdit && onEdit ? (
               <button onClick={() => onEdit(it)} className="flex-1 text-left min-w-0">
-                <p className={`text-sm font-bold truncate ${it.done ? 'line-through text-slate-400' : 'text-slate-700 dark:text-purple-100'}`}>{it.title}</p>
-                {renderMeta && <p className="text-[11px] text-slate-400 dark:text-purple-400 font-bold mt-0.5">{renderMeta(it)}</p>}
+                {inner}
               </button>
+              ) : (
+              <div className="flex-1 text-left min-w-0">
+                {inner}
+              </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -82,7 +97,7 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
   const [done, setDone] = useState(!!item?.done);
   const [err, setErr] = useState('');
 
-  const sectionTitle = section === 'timetable' ? '시간표 항목' : section === 'schedule' ? '공유 스케줄' : '숙제';
+  const sectionTitle = section === 'timetable' ? '시간표 항목' : section === 'schedule' ? '과외 시간표' : '숙제';
 
   const submit = () => {
     if (!title.trim()) { setErr('제목을 입력해주세요.'); return; }
@@ -293,7 +308,7 @@ export default function TutorTab({
               onAdd={() => setBoardModal({ section: 'timetable', item: null })}
               onEdit={(it) => setBoardModal({ section: 'timetable', item: it })}
               renderMeta={tutorTimetableMeta} />
-            <BoardSection title="공유 스케줄" emoji="📌" items={tutorBoard.board.schedule} emptyText="공유된 스케줄이 없어요"
+            <BoardSection title="과외 시간표" emoji="📌" items={tutorBoard.board.schedule} emptyText="등록된 수업 일정이 없어요"
               onAdd={() => setBoardModal({ section: 'schedule', item: null })}
               onEdit={(it) => setBoardModal({ section: 'schedule', item: it })}
               renderMeta={tutorScheduleMeta} />
@@ -384,14 +399,10 @@ export default function TutorTab({
                 onAdd={() => setBoardModal({ section: 'timetable', item: null })}
                 onEdit={(it) => setBoardModal({ section: 'timetable', item: it })}
                 renderMeta={tutorTimetableMeta} />
-              <BoardSection title="선생님과 공유 스케줄" emoji="📌" items={tutorBoard.board.schedule} emptyText="공유된 스케줄이 없어요"
-                onAdd={() => setBoardModal({ section: 'schedule', item: null })}
-                onEdit={(it) => setBoardModal({ section: 'schedule', item: it })}
-                renderMeta={tutorScheduleMeta} />
+              <BoardSection title="과외 시간표" emoji="📌" items={tutorBoard.board.schedule} emptyText="등록된 수업 일정이 없어요"
+                renderMeta={tutorScheduleMeta} allowAdd={false} allowEdit={false} />
               <BoardSection title="숙제" emoji="📝" items={tutorBoard.board.homework} emptyText="등록된 숙제가 없어요"
-                onAdd={() => setBoardModal({ section: 'homework', item: null })}
-                onEdit={(it) => setBoardModal({ section: 'homework', item: it })}
-                renderMeta={tutorHomeworkMeta} onToggle={toggleHomeworkDone} />
+                renderMeta={tutorHomeworkMeta} onToggle={toggleHomeworkDone} allowAdd={false} allowEdit={false} />
             </>
           ) : (
             <p className="text-xs text-slate-400 font-bold text-center py-10">보드를 불러오지 못했어요. 탭을 다시 열어주세요.</p>
