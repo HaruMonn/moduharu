@@ -285,11 +285,20 @@ export function useAppState() {
   const [authNickname, setAuthNickname] = useState('');
   const [authError, setAuthError] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
-  const [authRole, setAuthRole] = useState('student'); // 'student' | 'teacher'
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem('lifestyle_token') || '');
 
   // =================== [과외 모드 상태] ===================
+  // 관리자 모드: 켜져 있으면 선생님 UI (학생 목록/보드 관리), 꺼져 있으면 학생 UI
+  const [adminMode, setAdminModeState] = useState(() => localStorage.getItem('lifestyle_admin_mode') === 'true');
+  const setAdminMode = (v) => {
+    const val = !!v;
+    try { localStorage.setItem('lifestyle_admin_mode', val ? 'true' : 'false'); } catch { /* 무시 */ }
+    setAdminModeState(val);
+  };
+
+  // =================== [과외 모드 상태] ===================
   const [tutorStudents, setTutorStudents] = useState([]); // [{code, nickname}]
+  const [tutorSummaries, setTutorSummaries] = useState({}); // {code: {weekMinutes, todayMinutes, homeworkTotal, homeworkDone, nextClass}}
   const [tutorBoard, setTutorBoard] = useState(null); // {code, nickname, board}
   const [tutorRecords, setTutorRecords] = useState([]); // 선택된 학생의 공부 기록
   const [tutorLoading, setTutorLoading] = useState(false);
@@ -365,12 +374,13 @@ export function useAppState() {
       const res = await fetch(`${API_BASE}/users/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, password: pw, nickname: nick, role: authRole })
+        body: JSON.stringify({ id, password: pw, nickname: nick })
       });
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || '가입에 실패했어요.'); setAuthBusy(false); return; }
       localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
       setCurrentUser(data.user);
+      if (data.user?.role === 'teacher') setAdminMode(true); // 기존 선생님 계정은 관리자 모드 자동 활성화
       if (data.token) { localStorage.setItem('lifestyle_token', data.token); setSessionToken(data.token); }
       setAuthBusy(false);
       setAuthId(''); setAuthPassword(''); setAuthPasswordConfirm(''); setAuthNickname('');
@@ -399,6 +409,7 @@ export function useAppState() {
       if (!res.ok) { setAuthError(data.error || '로그인에 실패했어요.'); setAuthBusy(false); return; }
       localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
       setCurrentUser(data.user);
+      if (data.user?.role === 'teacher') setAdminMode(true); // 기존 선생님 계정은 관리자 모드 자동 활성화
       if (data.token) { localStorage.setItem('lifestyle_token', data.token); setSessionToken(data.token); }
       setAuthBusy(false);
       setAuthId(''); setAuthPassword('');
@@ -423,7 +434,8 @@ export function useAppState() {
     localStorage.removeItem('lifestyle_token');
     setCurrentUser(null);
     setSessionToken('');
-    setTutorStudents([]); setTutorBoard(null); setTutorRecords([]); setTutorView('home');
+    setAdminMode(false);
+    setTutorStudents([]); setTutorSummaries({}); setTutorBoard(null); setTutorRecords([]); setTutorView('home');
   };
 
   // =================== [과외 모드 API] ===================
@@ -451,12 +463,29 @@ export function useAppState() {
     } catch (e) { console.error(e); return null; }
   };
 
-  const setMyTutorRole = async (role) => {
+  // ---- 관리자 모드 (PIN으로 활성화 → 이 계정을 선생님으로 승격) ----
+  const fetchAdminStatus = async () => {
     try {
-      const data = await tutorFetch('/tutor/role', { method: 'POST', body: JSON.stringify({ role }) });
-      localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
-      setCurrentUser(data.user);
-    } catch (e) { alert(e.message); }
+      const data = await tutorFetch('/tutor/admin/status');
+      return !!data.hasPin;
+    } catch (e) { console.error(e); return false; }
+  };
+
+  const activateAdminMode = async (pin) => {
+    const data = await tutorFetch('/tutor/admin/activate', { method: 'POST', body: JSON.stringify({ pin }) });
+    localStorage.setItem('lifestyle_user', JSON.stringify(data.user));
+    setCurrentUser(data.user);
+    setAdminMode(true);
+    return data; // { user, isNewPin }
+  };
+
+  const fetchTutorSummaries = async () => {
+    try {
+      const data = await tutorFetch('/tutor/students/summary');
+      const map = {};
+      (data.students || []).forEach((s) => { map[s.code] = s; });
+      setTutorSummaries(map);
+    } catch (e) { console.error(e); }
   };
 
   const fetchTutorStudents = async () => {
@@ -464,6 +493,7 @@ export function useAppState() {
     try {
       const data = await tutorFetch('/tutor/students');
       setTutorStudents(data.students || []);
+      await fetchTutorSummaries();
     } catch (e) { setTutorError(e.message); }
     finally { setTutorLoading(false); }
   };
@@ -476,6 +506,7 @@ export function useAppState() {
       const data = await tutorFetch('/tutor/students', { method: 'POST', body: JSON.stringify({ studentCode: code }) });
       setTutorStudents(data.students || []);
       setTutorStudentCodeInput('');
+      await fetchTutorSummaries();
     } catch (e) { setTutorError(e.message); }
     finally { setTutorLoading(false); }
   };
@@ -485,6 +516,7 @@ export function useAppState() {
     try {
       const data = await tutorFetch(`/tutor/students/${encodeURIComponent(code)}`, { method: 'DELETE' });
       setTutorStudents(data.students || []);
+      setTutorSummaries((prev) => { const m = { ...prev }; delete m[code]; return m; });
       if (tutorBoard?.code === code) { setTutorBoard(null); setTutorRecords([]); setTutorView('home'); }
     } catch (e) { alert(e.message); }
   };
@@ -551,11 +583,11 @@ export function useAppState() {
   };
 
   useEffect(() => {
-    if (currentUser?.role !== 'student' || !currentUser?.teacherCode || !sessionToken) return;
+    if (adminMode || !currentUser?.teacherCode || !sessionToken) return;
     const t = setTimeout(() => { syncStudyRecords(); }, 8000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studyRecords, currentUser, sessionToken]);
+  }, [studyRecords, currentUser, sessionToken, adminMode]);
 
   // ---- 알림 상태 (뽀모도로/친구 요청 폴링에서 사용하므로 먼저 선언) ----
   const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem('lifestyle_notif_enabled') === 'true');
@@ -604,6 +636,43 @@ export function useAppState() {
     }, 30000);
     return () => clearInterval(t);
   }, [currentUser, sendNotification]);
+
+  // ---- 새 숙제 폴링 (60초마다) — 학생 모드일 때, 선생님이 숙제를 새로 넣으면 알림 ----
+  const seenHomeworkRef = useRef({ code: null, ids: new Set(), init: false });
+  useEffect(() => {
+    if (adminMode || !currentUser || !sessionToken) return;
+    const code = currentUser.code;
+    const key = `lifestyle_seenHomework_${code}`;
+    let st = seenHomeworkRef.current;
+    if (st.code !== code) {
+      let ids = new Set();
+      let init = false;
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw !== null) { ids = new Set(JSON.parse(raw).map(String)); init = true; }
+      } catch { /* 무시 */ }
+      st = { code, ids, init };
+      seenHomeworkRef.current = st;
+    }
+    const t = setInterval(async () => {
+      try {
+        const data = await tutorFetch(`/tutor/board/${encodeURIComponent(code)}`);
+        const hw = (data.board && data.board.homework) || [];
+        const ids = hw.map((h) => String(h.id));
+        const fresh = hw.filter((h) => !st.ids.has(String(h.id)));
+        if (st.init && fresh.length > 0) {
+          const first = fresh[0];
+          sendNotification('📝 새 숙제가 등록됐어요!', `${first.title}${fresh.length > 1 ? ` 외 ${fresh.length - 1}건` : ''}`);
+          setTutorBoard((prev) => (prev && prev.code === code ? { ...prev, board: data.board } : prev));
+        }
+        st.ids = new Set(ids);
+        st.init = true;
+        try { localStorage.setItem(key, JSON.stringify(ids)); } catch { /* 무시 */ }
+      } catch { /* 폴링 실패는 조용히 무시 */ }
+    }, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, sessionToken, sendNotification, adminMode]);
 
   // ---- 친구 요청 보내기 ----
   const addFriend = async () => {
@@ -1581,16 +1650,17 @@ export function useAppState() {
     getScoreBreakdown, fetchRankings, submitMyScore, currentUser, setCurrentUser, authMode,
     setAuthMode, authId, setAuthId, authPassword, setAuthPassword, authPasswordConfirm,
     setAuthPasswordConfirm, authNickname, setAuthNickname, authError, setAuthError, authBusy,
-    setAuthBusy, authRole, setAuthRole, sessionToken, setSessionToken, refreshMyUser,
+    setAuthBusy, sessionToken, setSessionToken, refreshMyUser,
     friends, setFriends, friendRequests, setFriendRequests, friendCodeInput,
     setFriendCodeInput, announcements, setAnnouncements, showNotif, setShowNotif, announceTitle,
     setAnnounceTitle, announceBody, setAnnounceBody, lastSeenAnnounce, setLastSeenAnnounce, isAdmin,
     setIsAdmin, adminToken, setAdminToken, adminTokenInput, setAdminTokenInput, NICKNAME_PATTERN,
     verifyAdmin, logoutAdmin, handleSignup, handleLogin, handleLogout, fetchFriends,
     addFriend, acceptFriend, rejectFriend, removeFriend, fetchAnnouncements, addAnnouncement, deleteAnnouncement,
-    setMyTutorRole, fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
+    adminMode, setAdminMode, fetchAdminStatus, activateAdminMode,
+    fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
     openTutorBoard, saveTutorBoard, fetchMyBoard, syncStudyRecords,
-    tutorStudents, tutorBoard, tutorRecords, tutorLoading, tutorError, setTutorError,
+    tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError, setTutorError,
     tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
