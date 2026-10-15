@@ -1,6 +1,6 @@
 {
-  "name": "모두의 하루",
-  "short_name": "모두의 하루",
+  "name": "모두의 과외",
+  "short_name": "모두의 과외",
   "description": "할 일, 시간표, 집중 타이머를 하나로 관리하는 일상 기록 앱",
   "start_url": "/",
   "display": "standalone",

@@ -1,6 +1,6 @@
 {
   "appId": "com.moduharu.app",
-  "appName": "모두의 하루",
+  "appName": "모두의 과외",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
