@@ -1,11 +1,14 @@
+import { useEffect } from 'react';
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
+import TutorTab from './components/TutorTab.jsx';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
 
 export default function App() {
   const {
@@ -21,11 +24,16 @@ export default function App() {
     setNewRequestCategory, rankings, rankingLoading, rankingReady, rankingFilter, setRankingFilter, calcMyScore, submitMyScore,
     currentUser, authMode, setAuthMode, authId, setAuthId, authPassword,
     setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, authError,
-    setAuthError, authBusy, friends, friendRequests, friendCodeInput, setFriendCodeInput,
+    setAuthError, authBusy, authRole, setAuthRole, friends, friendRequests, friendCodeInput, setFriendCodeInput,
     announcements, showNotif, setShowNotif, announceTitle, setAnnounceTitle, announceBody,
     setAnnounceBody, isAdmin, adminTokenInput, setAdminTokenInput, verifyAdmin, logoutAdmin,
     handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend, removeFriend,
-    addAnnouncement, deleteAnnouncement, newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
+    addAnnouncement, deleteAnnouncement,
+    setMyTutorRole, fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
+    openTutorBoard, saveTutorBoard, fetchMyBoard,
+    tutorStudents, tutorBoard, tutorRecords, tutorLoading, tutorError,
+    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
+    newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
     setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
     timerSeconds, currentStudy, setCurrentStudy, timerColor, setTimerColor, isPomodoro,
@@ -40,11 +48,19 @@ export default function App() {
     currentWeek, addWeeklyGoal, toggleWeeklyGoal, deleteWeeklyGoal, saveWeeklyReview, startEditReview,
     weekLabel, addRequest, toggleRequestVote, deleteRequest, exportData, importData,
     notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo, isDarkMode, setIsDarkMode, currentTime,
-    currentHourDecimal, decimalToTime, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
+    currentHourDecimal, decimalToTime, timeToDecimal, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
     formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, timerStartTime,
     renderHeader, todayRecords, getTotalStudySeconds, getComparedToYesterday, getTodoCompletionRate, handleShare,
     doughnutData, barData, captureAndShare,
   } = useAppState();
+
+  // 과외 탭 진입 시 데이터 자동 불러오기
+  useEffect(() => {
+    if (activeTab !== 'tutor' || !currentUser) return;
+    if (currentUser.role === 'student' && !tutorBoard) fetchMyBoard();
+    if (currentUser.role === 'teacher' && tutorView === 'home' && tutorStudents.length === 0) fetchTutorStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // 시간표 표시 범위: 일정이 있는 시간대 ±1시간 (일정 없으면 06:00~24:00)
   const ttRange = (() => {
@@ -97,8 +113,8 @@ export default function App() {
           <div className="absolute inset-0 z-[95] flex flex-col justify-center bg-slate-50 dark:bg-purple-950 p-6 overflow-y-auto">
             <div className="flex flex-col items-center mb-8">
               <div className="text-5xl mb-3">🌤️</div>
-              <h1 className="text-3xl font-black tracking-tight">모두의 하루</h1>
-              <p className="text-slate-500 dark:text-purple-300 text-sm font-bold mt-1">하루를 알차게 기록하고 성장해요</p>
+              <h1 className="text-3xl font-black tracking-tight">모두의 과외</h1>
+              <p className="text-slate-500 dark:text-purple-300 text-sm font-bold mt-1">시간표·숙제·공부 기록을 함께 관리해요</p>
             </div>
 
             {/* 로그인/가입 토글 */}
@@ -140,6 +156,14 @@ export default function App() {
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 확인</label>
                   <input type="password" value={authPasswordConfirm} onChange={(e) => setAuthPasswordConfirm(e.target.value)} placeholder="비밀번호를 다시 입력하세요" autoComplete="new-password" className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">역할</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setAuthRole('student')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${authRole === 'student' ? 'bg-indigo-500 text-white shadow' : 'bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300'}`}>📚 학생</button>
+                    <button type="button" onClick={() => setAuthRole('teacher')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${authRole === 'teacher' ? 'bg-indigo-500 text-white shadow' : 'bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 text-slate-500 dark:text-purple-300'}`}>🎓 선생님</button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-1">학생은 선생님과 시간표·스케줄·숙제를 공유해요</p>
                 </div>
                 {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
                 <button type="submit" disabled={authBusy} className="w-full bg-indigo-500 text-white rounded-xl font-bold py-3.5 hover:opacity-90 transition shadow-md disabled:opacity-50 mt-1">
@@ -681,6 +705,22 @@ export default function App() {
           </div>
         )}
 
+        {/* ======================= 과외 탭 ======================= */}
+        {activeTab === 'tutor' && (
+          <TutorTab
+            currentUser={currentUser} events={events} studyRecords={studyRecords}
+            decimalToTime={decimalToTime} timeToDecimal={timeToDecimal} setActiveTab={setActiveTab}
+            renderHeader={renderHeader}
+            tutorStudents={tutorStudents} tutorBoard={tutorBoard} tutorRecords={tutorRecords}
+            tutorLoading={tutorLoading} tutorError={tutorError}
+            tutorStudentCodeInput={tutorStudentCodeInput} setTutorStudentCodeInput={setTutorStudentCodeInput}
+            tutorView={tutorView} setTutorView={setTutorView}
+            setMyTutorRole={setMyTutorRole} registerTutorStudent={registerTutorStudent}
+            unregisterTutorStudent={unregisterTutorStudent} openTutorBoard={openTutorBoard}
+            saveTutorBoard={saveTutorBoard}
+          />
+        )}
+
         {/* ======================= 랭킹 탭 ======================= */}
         {activeTab === 'ranking' && (
           <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
@@ -889,7 +929,7 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="text-center mt-4 text-[10px] font-bold text-indigo-200/50">모두의 하루 · 함께 성장해요 🦊</div>
+                  <div className="text-center mt-4 text-[10px] font-bold text-indigo-200/50">모두의 과외 · 함께 성장해요 🦊</div>
                 </div>
               </div>
             </div>
@@ -917,6 +957,13 @@ export default function App() {
             <Apple size={24} className={activeTab === 'diary' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">기록</span>
           </button>
+
+          {currentUser && (
+            <button onClick={() => setActiveTab('tutor')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'tutor' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+              <GraduationCap size={24} className={activeTab === 'tutor' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+              <span className="text-[10px] font-bold">과외</span>
+            </button>
+          )}
 
           <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
@@ -1143,7 +1190,7 @@ export default function App() {
               <div className="space-y-4 text-sm text-slate-600 dark:text-purple-300 leading-relaxed">
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">1. 개인정보 수집 및 이용</h3>
-                  <p>회원가입 시 아이디, 비밀번호(암호화되어 저장됩니다), 닉네임을 수집합니다. 친구 코드, 친구 목록, 랭킹 기록, 의견 게시글은 서비스 제공을 위해 서버에 저장됩니다. 할 일, 시간표, 타이머 기록 등 개인 기록은 기본적으로 사용자의 기기 내부(로컬 스토리지)에만 저장되며 서버로 전송되지 않습니다.</p>
+                  <p>회원가입 시 아이디, 비밀번호(암호화되어 저장됩니다), 닉네임을 수집합니다. 친구 코드, 친구 목록, 랭킹 기록, 의견 게시글은 서비스 제공을 위해 서버에 저장됩니다. 할 일, 시간표, 타이머 기록 등 개인 기록은 기본적으로 사용자의 기기 내부(로컬 스토리지)에만 저장되며 서버로 전송되지 않습니다. 단, 과외 모드를 사용하는 학생의 보드(시간표·공유 스케줄·숙제)와 공부 기록은 담당 선생님과의 공유를 위해 서버에 저장됩니다.</p>
                 </section>
                 <section>
                   <h3 className="font-black text-slate-800 dark:text-purple-100 mb-1">2. 데이터 보관 및 삭제</h3>
@@ -1167,8 +1214,8 @@ export default function App() {
         {showOnboarding && (
           <div className={`absolute inset-0 z-[96] flex flex-col justify-center items-center bg-white dark:bg-purple-950 p-6 transition-opacity duration-500 ${onboardingFade ? 'opacity-0' : 'opacity-100'}`}>
             <div className="text-6xl mb-6">🎨</div>
-            <h1 className="text-3xl font-black mb-2">모두의 하루</h1>
-            <p className="text-slate-500 dark:text-purple-300 mb-8 text-center font-bold">하루를 알차게 기록하고<br/>성장하는 나를 만나보세요! 🦊</p>
+            <h1 className="text-3xl font-black mb-2">모두의 과외</h1>
+            <p className="text-slate-500 dark:text-purple-300 mb-8 text-center font-bold">하루를 알차게 기록하고<br/>선생님과 함께 성장해요! 🦊</p>
             <div className="space-y-3 w-full mb-8">
               {[
                 { icon: '✅', title: '할 일 관리', desc: '오늘 해야 할 일을 카테고리별로 정리' },
