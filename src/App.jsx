@@ -936,25 +936,31 @@ export default function App() {
 
         {/* ======================= 하단 네비게이션 ======================= */}
         <nav className="absolute bottom-0 w-full nav-safe bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40">
+          {currentUser?.role !== 'student' && (
           <button onClick={() => setActiveTab('todo')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'todo' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <CheckSquare size={24} className={activeTab === 'todo' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">할 일</span>
           </button>
+          )}
           
+          {currentUser?.role !== 'student' && (
           <button onClick={() => setActiveTab('timetable')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'timetable' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Calendar size={24} className={activeTab === 'timetable' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">시간표</span>
           </button>
+          )}
 
           <button onClick={() => setActiveTab('timer')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'timer' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <TimerIcon size={24} className={activeTab === 'timer' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">타이머</span>
           </button>
 
+          {currentUser?.role !== 'student' && (
           <button onClick={() => setActiveTab('diary')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'diary' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Apple size={24} className={activeTab === 'diary' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">기록</span>
           </button>
+          )}
 
           {currentUser && (
             <button onClick={() => setActiveTab('tutor')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'tutor' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
@@ -963,10 +969,12 @@ export default function App() {
             </button>
           )}
 
+          {currentUser?.role !== 'student' && (
           <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">랭킹</span>
           </button>
+          )}
 
           {currentUser?.role !== 'student' && (
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
