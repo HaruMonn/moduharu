@@ -62,14 +62,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // 시간표 표시 범위: 일정이 있는 시간대 ±1시간 (일정 없으면 06:00~24:00)
-  const ttRange = (() => {
-    if (!events.length) return { start: 6, end: 24 };
-    const s = Math.max(0, Math.floor(Math.min(...events.map(e => e.start))) - 1);
-    const e = Math.min(24, Math.ceil(Math.max(...events.map(e => e.end))) + 1);
-    return { start: s, end: Math.max(e, s + 4) };
-  })();
-  const ttHours = ttRange.end - ttRange.start;
+  // 시간표: 00:00~24:00 고정, 행 높이를 화면에 맞춰 자동으로 채움 (스크롤 없음)
 
   // 오늘의 기록 요약 바: 해당 시간에 활동이 있으면 색상 클래스 반환
   const hourActivity = (h) => {
@@ -246,11 +239,11 @@ export default function App() {
         {/* ======================= 시간표 화면 ======================= */}
         {activeTab === 'timetable' && (
           <div className="flex flex-col flex-1 min-h-0">
-            {renderHeader('주간 시간표', '일~토 요일별')}
+            {renderHeader('주간 시간표', '일~토 요일별 · 00:00~24:00')}
             {/* 요일 헤더 */}
             <div className="px-2 pt-2 pb-1 flex bg-white dark:bg-purple-900 shrink-0">
-              <div className="w-10 shrink-0"></div>
-              <div className="flex-1 grid grid-cols-7 gap-1">
+              <div className="w-9 shrink-0"></div>
+              <div className="flex-1 grid grid-cols-7 gap-0.5">
                 {DAY_LABELS.map((dow, i) => {
                   const isToday = i === new Date().getDay();
                   return (
@@ -259,38 +252,43 @@ export default function App() {
                 })}
               </div>
             </div>
-            {/* 시간 그리드 (일정 있는 시간대만 표시) */}
-            <div className="flex-1 overflow-y-auto px-2 pt-3 pb-4">
-              <div className="flex">
+            {/* 시간 그리드: 24시간을 한 화면에 (스크롤 없음) */}
+            <div className="flex-1 min-h-0 px-2 pb-2">
+              <div className="flex h-full">
                 {/* 시간축 라벨 */}
-                <div className="w-10 shrink-0 relative" style={{ height: `${ttHours * 56}px` }}>
-                  {Array.from({ length: ttHours + 1 }).map((_, i) => (
-                    <div key={i} className="absolute right-1 -translate-y-1/2" style={{ top: `${i * 56}px` }}>
-                      <span className="text-[8px] font-bold text-slate-400 dark:text-purple-300">{String(ttRange.start + i).padStart(2, '0')}:00</span>
+                <div className="w-9 shrink-0 grid" style={{ gridTemplateRows: 'repeat(24, minmax(0, 1fr))' }}>
+                  {Array.from({ length: 24 }).map((_, h) => (
+                    <div key={h} className="relative">
+                      <span className="absolute right-1 -top-1 text-[8px] font-bold text-slate-400 dark:text-purple-300">{String(h).padStart(2, '0')}</span>
                     </div>
                   ))}
                 </div>
                 {/* 7개 요일 컬럼 */}
-                <div className="flex-1 grid grid-cols-7 gap-1">
+                <div className="flex-1 grid grid-cols-7 gap-0.5 h-full">
                   {DAY_LABELS.map((dow, i) => {
                     const isToday = i === new Date().getDay();
                     const dayEvents = events.filter((e) => e.day === i);
                     return (
-                      <div key={i} className="relative" style={{ height: `${ttHours * 56}px` }}>
-                        {Array.from({ length: ttHours }).map((_, h) => (
-                          <div key={h} className="absolute left-0 right-0 border-b border-slate-100 dark:border-purple-800/40" style={{ top: `${h * 56}px`, height: '56px' }}></div>
-                        ))}
-                        {isToday && currentHourDecimal >= ttRange.start && currentHourDecimal <= ttRange.end && (
-                          <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top: `${(currentHourDecimal - ttRange.start) * 56}px` }}>
+                      <div key={i} className="relative h-full">
+                        {/* 24행 배경 그리드 */}
+                        <div className="absolute inset-0 grid" style={{ gridTemplateRows: 'repeat(24, minmax(0, 1fr))' }}>
+                          {Array.from({ length: 24 }).map((_, h) => (
+                            <div key={h} className="border-b border-slate-100 dark:border-purple-800/40"></div>
+                          ))}
+                        </div>
+                        {/* 현재 시각 선 */}
+                        {isToday && (
+                          <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top: `${(currentHourDecimal / 24) * 100}%` }}>
                             <div className="h-0.5 bg-red-400/70"></div>
                           </div>
                         )}
+                        {/* 일정 블록 */}
                         {dayEvents.map((event) => {
-                          const top = (event.start - ttRange.start) * 56;
-                          const height = Math.max((event.end - event.start) * 56, 22);
+                          const top = (event.start / 24) * 100;
+                          const height = Math.max(((event.end - event.start) / 24) * 100, 3);
                           const showTime = (event.end - event.start) >= 1;
                           return (
-                            <button key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 rounded-md px-1 py-0.5 text-left overflow-hidden active:scale-95 shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${top}px`, height: `${height}px` }}>
+                            <button key={event.id} onClick={() => openModal(event)} className={`absolute left-0 right-0 rounded-md px-1 py-0.5 text-left overflow-hidden active:scale-95 shadow-sm cursor-pointer border border-white/20 dark:border-black/20 ${event.color}`} style={{ top: `${top}%`, height: `${height}%`, minHeight: '20px' }}>
                               <div className="text-[9px] font-bold leading-tight break-words">{event.title}</div>
                               {showTime && <div className="text-[8px] font-bold opacity-70 leading-none mt-0.5">{decimalToTime(event.start)}-{decimalToTime(event.end)}</div>}
                             </button>
@@ -970,10 +968,12 @@ export default function App() {
             <span className="text-[10px] font-bold">랭킹</span>
           </button>
 
+          {currentUser?.role !== 'student' && (
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <MessageSquare size={24} className={activeTab === 'requests' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">요청</span>
           </button>
+          )}
         </nav>
 
         {/* 뒤로가기 종료 안내 토스트 */}
