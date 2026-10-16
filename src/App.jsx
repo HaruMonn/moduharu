@@ -3,7 +3,7 @@ import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS, APP_VERSION } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon, GraduationCap } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
@@ -21,13 +21,13 @@ export default function App() {
     editingDiary, newWeeklyGoal, setNewWeeklyGoal, weeklyReviewGood, setWeeklyReviewGood, weeklyReviewBad,
     setWeeklyReviewBad, weeklyReviewNext, setWeeklyReviewNext, editingReview, requests, requestsLoading,
     requestsError, newRequestTitle, setNewRequestTitle, newRequestBody, setNewRequestBody, newRequestCategory,
-    setNewRequestCategory, rankings, rankingLoading, rankingReady, rankingFilter, setRankingFilter, calcMyScore, submitMyScore,
+    setNewRequestCategory,
     currentUser, authMode, setAuthMode, authId, setAuthId, authPassword,
     setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, authError,
-    setAuthError, authBusy, friends, friendRequests, friendCodeInput, setFriendCodeInput,
+    setAuthError, authBusy, friendRequests,
     announcements, showNotif, setShowNotif, announceTitle, setAnnounceTitle, announceBody,
     setAnnounceBody, isAdmin, adminTokenInput, setAdminTokenInput, verifyAdmin, logoutAdmin,
-    handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend, removeFriend,
+    handleSignup, handleLogin, handleLogout, acceptFriend, rejectFriend,
     addAnnouncement, deleteAnnouncement,
     adminMode, setAdminMode, fetchAdminStatus, activateAdminMode,
     updateInfo, showUpdate, setShowUpdate, checkForUpdate,
@@ -736,221 +736,6 @@ export default function App() {
           />
         )}
 
-        {/* ======================= 랭킹 탭 ======================= */}
-        {activeTab === 'ranking' && (
-          <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
-            {renderHeader('친구 랭킹', `내 집중 ${calcMyScore()}분`)}
-            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
-              {/* ===== 친구와 경쟁 (랭킹) ===== */}
-              <div className="shrink-0 mb-4 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-                {!currentUser ? (
-                  <div className="text-center text-slate-400 dark:text-purple-300/70 py-8 text-sm">
-                    <div className="text-3xl mb-2">🔒</div>
-                    로그인하면 친구와 경쟁할 수 있어요!
-                  </div>
-                ) : !rankingReady ? (
-                  <div className="text-center text-slate-400 dark:text-purple-300/70 py-8 text-sm">
-                    <div className="text-3xl mb-2">🚧</div>
-                    랭킹을 준비 중이에요.<br/>조금만 기다려주세요!
-                  </div>
-                ) : (
-                  <>
-                    {/* 내 프로필 + 기록 등록 */}
-                    <div className="flex items-center gap-2 mb-3 bg-slate-50 dark:bg-purple-950 rounded-xl p-3 border border-slate-100 dark:border-purple-800">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-black text-slate-700 dark:text-purple-100 truncate">{currentUser.nickname}<span className="text-slate-400 font-bold">#{currentUser.code}</span></div>
-                        <div className="text-[10px] text-slate-400 dark:text-purple-300/70 font-bold">내 고유 코드</div>
-                      </div>
-                      <button onClick={submitMyScore} className="shrink-0 px-4 py-2 bg-indigo-500 text-white rounded-xl font-bold text-sm shadow hover:opacity-90 transition">기록 등록 🏆</button>
-                    </div>
-
-                    {/* 친구 추가 (코드 기반) */}
-                    <div className="flex gap-2 mb-3">
-                      <input type="text" value={friendCodeInput} onChange={(e) => setFriendCodeInput(e.target.value)} placeholder="친구 코드 입력 (예: Ab3x)" maxLength={4} className="flex-1 min-w-0 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
-                      <button onClick={addFriend} className="shrink-0 px-4 py-2 bg-slate-900 text-white dark:bg-purple-200 dark:text-purple-950 rounded-xl font-bold text-sm hover:opacity-90 transition">+ 친구</button>
-                    </div>
-
-                    {/* 친구 목록 */}
-                    {friends.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-4">
-                        {friends.map(f => (
-                          <span key={f.code} className="inline-flex items-center gap-1 text-[11px] font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300 pl-2.5 pr-1 py-1 rounded-full border border-sky-100 dark:border-sky-800">{f.nickname}<span className="text-sky-400">#{f.code}</span><button onClick={() => removeFriend(f.code)} className="p-0.5 rounded-full hover:bg-sky-100 dark:hover:bg-sky-800" aria-label={`${f.nickname} 삭제`}><X size={12} /></button></span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* 랭킹 필터 */}
-                    <div className="flex gap-1.5 mb-3">
-                      {[{ v: 'all', label: '🌍 전체' }, { v: 'friends', label: '👥 친구만' }].map(o => (
-                        <button key={o.v} onClick={() => setRankingFilter(o.v)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${rankingFilter === o.v ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>{o.label}</button>
-                      ))}
-                    </div>
-
-                    {/* 랭킹 보드 */}
-                    <div className="space-y-2">
-                      {rankingLoading ? (
-                        <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">순위 불러오는 중... ⏳</div>
-                      ) : (() => {
-                        const friendNicks = new Set(friends.map(f => `${f.nickname}#${f.code}`));
-                        const myNick = currentUser ? `${currentUser.nickname}#${currentUser.code}` : '';
-                        const visible = (rankingFilter === 'friends' ? rankings.filter(r => r.nick === myNick || friendNicks.has(r.nick)) : rankings).slice(0, 20);
-                        if (visible.length === 0) return <div className="text-center text-slate-400 dark:text-purple-300/50 py-6 text-sm">{rankingFilter === 'friends' ? '친구 중 등록된 기록이 없어요.<br/>친구를 추가하고 기록을 등록해보세요! 🤝' : '아직 등록된 기록이 없어요.<br/>첫 번째로 도전해보세요! 💪'}</div>;
-                        return visible.map((r, i) => (
-                          <div key={r.nick + i} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : 'bg-slate-50 dark:bg-purple-950 border border-slate-100 dark:border-purple-800'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-200 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>
-                              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                            </div>
-                            <span className={`flex-1 font-bold text-sm truncate ${r.nick === `${currentUser.nickname}#${currentUser.code}` ? 'text-indigo-500 dark:text-purple-300' : 'text-slate-700 dark:text-purple-100'}`}>{r.nick}{r.nick === `${currentUser.nickname}#${currentUser.code}` ? ' (나)' : ''}</span>
-                            <span className="font-mono font-black text-sm text-slate-600 dark:text-purple-200">{r.score}분</span>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ======================= 통계 화면 모달 (2단계) ======================= */}
-        {showStats && (
-          <div className="absolute inset-0 z-50 flex flex-col justify-end bg-slate-900/40 dark:bg-purple-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-purple-900 rounded-t-3xl p-6 shadow-2xl pb-[100px] animate-in slide-in-from-bottom-full duration-300 max-h-[85vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black">📊 일간 리포트</h2>
-                <div className="flex gap-2">
-                  <button onClick={handleShare} className="p-2 bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-300 rounded-full hover:scale-105 transition shadow-sm"><Share2 size={20} /></button>
-                  <button onClick={() => setShowStats(false)} className="p-2 bg-slate-100 dark:bg-purple-800 rounded-full hover:bg-slate-200 transition"><X size={20} /></button>
-                </div>
-              </div>
-              
-              <div id="stats-capture-area" className="space-y-6 pb-2 bg-slate-50 dark:bg-purple-950 p-4 -mx-4 rounded-3xl">
-                {/* 1. 타이머 통계 요약 */}
-                <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4 opacity-20"><TimerIcon size={80} /></div>
-                  <h3 className="font-bold text-indigo-100 mb-1">오늘 집중한 시간</h3>
-                  <div className="text-4xl font-black font-mono mb-2">{formatTimerDisplay(getTotalStudySeconds())}</div>
-                  <p className="text-sm font-medium text-indigo-100/80">{getComparedToYesterday()}</p>
-                </div>
-
-                {/* 2. 할 일 달성률 */}
-                <div className="bg-slate-50 dark:bg-purple-950 rounded-3xl p-6 border border-slate-100 dark:border-purple-800 shadow-sm">
-                  <h3 className="font-bold text-slate-700 dark:text-purple-200 mb-4 flex items-center justify-between">
-                    <span>할 일 달성률</span>
-                    <span className="text-2xl font-black text-indigo-500 dark:text-purple-400">{getTodoCompletionRate()}%</span>
-                  </h3>
-                  <div className="w-full bg-slate-200 dark:bg-purple-900 rounded-full h-4 overflow-hidden shadow-inner">
-                    <div className="bg-indigo-500 dark:bg-purple-500 h-4 rounded-full transition-all duration-1000 ease-out" style={{ width: `${getTodoCompletionRate()}%` }}></div>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-purple-400 mt-3 font-bold text-center">총 {todos.length}개 중 {todos.filter(t => t.completed).length}개 완료</p>
-                </div>
-
-                {/* 3. 과목별 파이 차트 */}
-                <div className="bg-slate-50 dark:bg-purple-950 rounded-3xl p-6 border border-slate-100 dark:border-purple-800 shadow-sm flex flex-col items-center">
-                  <h3 className="font-bold text-slate-700 dark:text-purple-200 mb-4 self-start">과목별 집중 비율</h3>
-                  <div className="w-48 h-48 relative">
-                    {todayRecords.length > 0 ? (
-                      <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }} />
-                    ) : (
-                       <div className="w-full h-full rounded-full border-4 border-slate-200 dark:border-purple-800/50 flex items-center justify-center">
-                         <span className="text-xs text-slate-400">기록 없음</span>
-                       </div>
-                    )}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-xl font-black text-slate-800 dark:text-purple-50">{todayRecords.length}</span>
-                      <span className="text-[10px] font-bold text-slate-400">세션</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. 주간 막대형 차트 */}
-                <div className="bg-slate-50 dark:bg-purple-950 rounded-3xl p-6 border border-slate-100 dark:border-purple-800 shadow-sm">
-                  <h3 className="font-bold text-slate-700 dark:text-purple-200 mb-4">주간 집중 추이</h3>
-                  <div className="h-40 w-full">
-                    <Bar 
-                      data={barData} 
-                      options={{ 
-                        maintainAspectRatio: false, 
-                        plugins: { legend: { display: false } },
-                        scales: { 
-                          y: { display: false, beginAtZero: true },
-                          x: { grid: { display: false }, ticks: { font: { size: 10, weight: 'bold' } } }
-                        }
-                      }} 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. 공유하기 배너 (캡처 영역 밖) */}
-              <button onClick={() => captureAndShare('stats-capture-area')} className="w-full bg-indigo-50 dark:bg-purple-800/30 border border-indigo-100 dark:border-purple-700 rounded-2xl p-4 flex items-center justify-center gap-2 hover:bg-indigo-100 dark:hover:bg-purple-800/50 transition-colors mt-4">
-                <span className="font-bold text-indigo-600 dark:text-purple-300">인스타 스토리에 성과 인증하기 📸</span>
-              </button>
-
-              {/* ===== 월간 리포트 (공유 전용 예쁜 카드) ===== */}
-              <div className="mt-6 bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-black text-slate-800 dark:text-purple-100">📅 월간 리포트</h3>
-                  <button onClick={() => captureAndShare('monthly-card')} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500 text-white text-xs font-bold shadow hover:opacity-90 transition"><Share2 size={14}/> 공유하기</button>
-                </div>
-
-                {/* 공유 이미지로 캡처될 카드 */}
-                <div id="monthly-card" className="rounded-3xl overflow-hidden bg-gradient-to-br from-[#1f2937] to-[#111827] text-white p-6 relative">
-                  <div className="flex items-start justify-between mb-5">
-                    <div>
-                      <p className="text-indigo-300 text-xs font-bold mb-1">MONTHLY REPORT</p>
-                      <h3 className="text-2xl font-black">{getMonthlySummary().year}년 {getMonthlySummary().month + 1}월</h3>
-                    </div>
-                    <span className="text-3xl">🎨</span>
-                  </div>
-
-                  {/* 핵심 지표 3종 */}
-                  <div className="flex gap-3 mb-5">
-                    <div className="flex-1 bg-white/10 backdrop-blur rounded-2xl p-3 text-center">
-                      <div className="text-[10px] text-indigo-200 font-bold mb-1">총 집중</div>
-                      <div className="text-xl font-black font-mono">{formatTimerDisplay(getMonthlySummary().totalSeconds)}</div>
-                    </div>
-                    <div className="flex-1 bg-white/10 backdrop-blur rounded-2xl p-3 text-center">
-                      <div className="text-[10px] text-indigo-200 font-bold mb-1">집중 일수</div>
-                      <div className="text-xl font-black font-mono">{getMonthlySummary().activeDays}<span className="text-sm font-bold text-indigo-200">일</span></div>
-                    </div>
-                    <div className="flex-1 bg-white/10 backdrop-blur rounded-2xl p-3 text-center">
-                      <div className="text-[10px] text-indigo-200 font-bold mb-1">일 평균</div>
-                      <div className="text-xl font-black font-mono">{formatTimerDisplay(getMonthlySummary().avgSeconds)}</div>
-                    </div>
-                  </div>
-
-                  {/* 히트맵 미니 */}
-                  <div className="bg-white/5 rounded-2xl p-3 mb-4">
-                    <div className="flex gap-1 mb-1">
-                      {['일','월','화','수','목','금','토'].map((d,i) => <span key={i} className="flex-1 text-center text-[9px] font-bold text-indigo-200/60">{d}</span>)}
-                    </div>
-                    <div className="grid grid-cols-7 gap-1">
-                      {Array.from({ length: getMonthDays().firstDow }).map((_, i) => <div key={'mp'+i} />)}
-                      {getMonthDays().days.map(d => {
-                        const lvl = d.seconds === 0 ? 'bg-white/10' : d.seconds < 9000 ? 'bg-emerald-400/40' : d.seconds < 18000 ? 'bg-emerald-400/60' : d.seconds < 27000 ? 'bg-emerald-400/80' : d.seconds < 36000 ? 'bg-emerald-400' : 'bg-emerald-300';
-                        return <div key={d.day} className={`aspect-square rounded-[4px] ${lvl}`} />;
-                      })}
-                    </div>
-                  </div>
-
-                  {/* 하이라이트 문구 */}
-                  <div className="flex items-center gap-2 bg-white/10 rounded-2xl p-3">
-                    <span className="text-lg">🔥</span>
-                    <p className="text-xs font-bold text-indigo-100 leading-snug">
-                      이번 달 가장 열심히한 요일은 <span className="text-amber-300">{getMonthlySummary().bestDowName}요일</span>!
-                      {getMonthlySummary().bestDay && getMonthlySummary().bestDay.seconds > 0 ? <> 최고 기록은 {getMonthlySummary().bestDay.day}일 ({formatTimerDisplay(getMonthlySummary().bestDay.seconds)})이에요.</> : ' 아직 기록이 없어요. 오늘부터 시작해볼까요?'}
-                    </p>
-                  </div>
-
-                  <div className="text-center mt-4 text-[10px] font-bold text-indigo-200/50">모두의 과외 · 함께 성장해요 🦊</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ======================= 하단 네비게이션 ======================= */}
         <nav className="absolute bottom-0 w-full nav-safe bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40">
           {adminMode && (
@@ -984,13 +769,6 @@ export default function App() {
               <GraduationCap size={24} className={activeTab === 'tutor' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
               <span className="text-[10px] font-bold">과외</span>
             </button>
-          )}
-
-          {adminMode && (
-          <button onClick={() => setActiveTab('ranking')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'ranking' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
-            <Trophy size={24} className={activeTab === 'ranking' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
-            <span className="text-[10px] font-bold">랭킹</span>
-          </button>
           )}
 
           {adminMode && (
@@ -1069,7 +847,7 @@ export default function App() {
                   {currentUser ? (
                     <>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="font-black text-slate-700 dark:text-purple-100">{currentUser.nickname}<span className="text-slate-400 font-bold">#{currentUser.code}</span></span>
+                        <span className="font-black text-slate-700 dark:text-purple-100">{currentUser.nickname}</span>
                         <span className="text-[10px] font-bold text-slate-400 bg-slate-200 dark:bg-purple-800 px-2 py-0.5 rounded-full">@{currentUser.id}</span>
                       </div>
                       <button onClick={handleLogout} className="w-full py-2.5 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300 text-sm font-bold flex items-center justify-center gap-1.5 hover:bg-rose-200 transition"><LogOut size={16}/> 로그아웃</button>
