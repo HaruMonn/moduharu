@@ -17,4 +17,4 @@ export const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 export const NOTION_SITE_URL = 'https://app.notion.com/p/3fb0cd898d6881df9093ef398a8d38d5';
 
 // 앱 버전 (app-release.json의 version과 함께 올림 — 푸시할 때마다 +1)
-export const APP_VERSION = '1.1';
+export const APP_VERSION = '1.2';
