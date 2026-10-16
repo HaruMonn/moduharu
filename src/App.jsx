@@ -771,12 +771,10 @@ export default function App() {
             </button>
           )}
 
-          {adminMode && (
           <button onClick={() => setActiveTab('requests')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'requests' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
             <MessageSquare size={24} className={activeTab === 'requests' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
             <span className="text-[10px] font-bold">요청</span>
           </button>
-          )}
         </nav>
 
         {/* 뒤로가기 종료 안내 토스트 */}
