@@ -299,13 +299,25 @@ export function useAppState() {
   // =================== [인앱 업데이트 확인] ===================
   const [updateInfo, setUpdateInfo] = useState(null); // {version, apkUrl, notes}
   const [showUpdate, setShowUpdate] = useState(false);
+  // 버전 비교 (1.1, 1.2, 1.10 형식 지원)
+  const compareVersions = (a, b) => {
+    const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+    const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+      const diff = (pa[i] || 0) - (pb[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  };
+
   const checkForUpdate = async (manual = false) => {
     try {
       const res = await fetch(`${API_BASE}/app/version`);
       if (!res.ok) throw new Error('version check failed');
       const data = await res.json();
-      if ((Number(data.version) || 0) > APP_VERSION) {
-        setUpdateInfo({ version: Number(data.version), apkUrl: data.apkUrl || '', notes: data.notes || '' });
+      if (compareVersions(data.version, APP_VERSION) > 0) {
+        setUpdateInfo({ version: String(data.version), apkUrl: data.apkUrl || '', notes: data.notes || '' });
         setShowUpdate(true);
         return true;
       }

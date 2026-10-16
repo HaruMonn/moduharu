@@ -591,9 +591,9 @@ const withTutorDefaults = (u) => {
   return v;
 };
 
+// 선생님은 모든 학생의 보드에 접근 가능 (앱을 선생님 학생들하고만 쓰므로)
 const isTeacherOf = (teacher, student) =>
-  !!teacher && !!student && teacher.role === 'teacher' &&
-  String(student.teacherCode || '').toLowerCase() === String(teacher.code || '').toLowerCase();
+  !!teacher && !!student && teacher.role === 'teacher';
 
 // 학생 본인 또는 담당 선생님만 접근 가능
 const canAccessBoard = (me, student) =>
@@ -710,7 +710,7 @@ app.get('/api/app/version', async (req, res) => {
     const raw = await fs.promises.readFile(path.join(__dirname, '..', 'app-release.json'), 'utf-8');
     const info = JSON.parse(raw);
     res.json({
-      version: Number(info.version) || 0,
+      version: String(info.version || '1'),
       apkUrl: typeof info.apkUrl === 'string' ? info.apkUrl : '',
       notes: typeof info.notes === 'string' ? info.notes : '',
     });
