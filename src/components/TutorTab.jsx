@@ -1,9 +1,24 @@
 import { useState } from 'react';
-import { X, Trash2, Plus, Check, ChevronLeft } from 'lucide-react';
+import { X, Trash2, Plus, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Bar } from 'react-chartjs-2';
-import { COLOR_OPTIONS, DAY_LABELS } from '../constants.js';
+import { COLOR_OPTIONS, DAY_LABELS, NOTION_SITE_URL } from '../constants.js';
 
 // =================== 과외 모드 컴포넌트 ===================
+
+// 노션 사이트 배너 (선생님/학생 홈 상단)
+function SiteBanner() {
+  return (
+    <button onClick={() => window.open(NOTION_SITE_URL, '_system')}
+      className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-3xl p-4 shadow-md text-left text-white flex items-center gap-3 hover:opacity-95 active:scale-[0.99] transition">
+      <span className="text-2xl">🌐</span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-black text-sm">모두의 과외 사이트</span>
+        <span className="block text-[11px] font-bold text-indigo-100">수업 안내 · 공지사항 · 앱 다운로드</span>
+      </span>
+      <ChevronRight size={18} className="text-indigo-100 shrink-0" />
+    </button>
+  );
+}
 
 function WeekChart({ records }) {
   const days = [];
@@ -308,6 +323,7 @@ export default function TutorTab({
           </>
         ) : (
           <>
+            <SiteBanner />
             <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
               <p className="text-xs font-bold text-slate-400 dark:text-purple-400 mb-1">내 코드 — 학생에게 알려주세요</p>
               <p className="font-black text-2xl text-indigo-500 tracking-widest">{currentUser.code}</p>
@@ -395,6 +411,7 @@ export default function TutorTab({
             <p className="text-xs text-slate-400 font-bold text-center py-10">보드를 불러오는 중...</p>
           ) : tutorBoard ? (
             <>
+              <SiteBanner />
               <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-3xl p-4 border border-indigo-100 dark:border-indigo-800">
                 <p className="text-xs font-bold text-indigo-600 dark:text-indigo-300">시간표·스케줄·숙제는 선생님과 공유돼요. 공부 기록도 자동으로 전달돼요.</p>
               </div>
