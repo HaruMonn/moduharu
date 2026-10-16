@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Trash2, Plus, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Plus, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Bar } from 'react-chartjs-2';
 import { COLOR_OPTIONS, DAY_LABELS, NOTION_SITE_URL } from '../constants.js';
 
@@ -225,8 +225,8 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
 export default function TutorTab({
   currentUser, events, studyRecords, decimalToTime, timeToDecimal, setActiveTab, renderHeader,
   tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
-  tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
-  adminMode, registerTutorStudent, unregisterTutorStudent, openTutorBoard, saveTutorBoard, fetchTutorStudents,
+  tutorView, setTutorView,
+  adminMode, openTutorBoard, saveTutorBoard, fetchTutorStudents,
 }) {
   const [boardModal, setBoardModal] = useState(null); // {section, item} | null
 
@@ -289,7 +289,7 @@ export default function TutorTab({
             <button onClick={() => { setTutorView('home'); fetchTutorStudents(); }} className="flex items-center gap-1 text-sm font-bold text-slate-500 dark:text-purple-300 self-start">
               <ChevronLeft size={16} /> 학생 목록으로
             </button>
-            <h2 className="font-black text-xl text-slate-700 dark:text-purple-100">{tutorBoard.nickname} <span className="text-xs text-slate-400 font-bold">({tutorBoard.code})</span></h2>
+            <h2 className="font-black text-xl text-slate-700 dark:text-purple-100">{tutorBoard.nickname}</h2>
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-white dark:bg-purple-900 rounded-2xl p-3 text-center border border-slate-100 dark:border-purple-800">
                 <p className="text-[10px] font-bold text-slate-400">이번 주 공부</p>
@@ -325,10 +325,6 @@ export default function TutorTab({
           <>
             <SiteBanner />
             <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-              <p className="text-xs font-bold text-slate-400 dark:text-purple-400 mb-1">내 코드 — 학생에게 알려주세요</p>
-              <p className="font-black text-2xl text-indigo-500 tracking-widest">{currentUser.code}</p>
-            </div>
-            <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-black text-slate-700 dark:text-purple-100">📅 내 시간표</h3>
                 <button onClick={() => setActiveTab('timetable')} className="text-xs font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/40 px-3 py-1.5 rounded-full">편집하기</button>
@@ -357,14 +353,6 @@ export default function TutorTab({
               )}
             </div>
             <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
-              <h3 className="font-black text-slate-700 dark:text-purple-100 mb-3">➕ 학생 등록</h3>
-              <div className="flex gap-2">
-                <input value={tutorStudentCodeInput} onChange={(e) => setTutorStudentCodeInput(e.target.value)} placeholder="학생 코드 입력" className="flex-1 bg-slate-50 dark:bg-purple-950 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-bold" />
-                <button onClick={registerTutorStudent} disabled={tutorLoading} className="bg-indigo-500 text-white rounded-xl font-bold px-5 text-sm disabled:opacity-50">등록</button>
-              </div>
-              <p className="text-[10px] text-slate-400 font-bold mt-2">학생이 가입 후 알려준 코드를 입력하세요</p>
-            </div>
-            <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
               <h3 className="font-black text-slate-700 dark:text-purple-100 mb-3">👥 내 학생 <span className="text-xs text-slate-400">({tutorStudents.length})</span></h3>
               {tutorLoading && tutorStudents.length === 0 ? (
                 <p className="text-xs text-slate-400 font-bold text-center py-3">불러오는 중...</p>
@@ -378,9 +366,8 @@ export default function TutorTab({
                     <div key={s.code} className="bg-slate-50 dark:bg-purple-950/60 rounded-2xl px-3 py-2.5">
                       <div className="flex items-center gap-2">
                         <button onClick={() => openTutorBoard(s.code)} className="flex-1 text-left">
-                          <p className="text-sm font-bold text-slate-700 dark:text-purple-100">{s.nickname} <span className="text-[11px] text-slate-400 font-bold">{s.code}</span></p>
+                          <p className="text-sm font-bold text-slate-700 dark:text-purple-100">{s.nickname}</p>
                         </button>
-                        <button onClick={() => unregisterTutorStudent(s.code)} className="text-slate-300 hover:text-rose-500 p-1"><Trash2 size={16} /></button>
                       </div>
                       {sum ? (
                       <button onClick={() => openTutorBoard(s.code)} className="w-full text-left mt-1.5">

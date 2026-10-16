@@ -599,9 +599,10 @@ const isTeacherOf = (teacher, student) =>
 const canAccessBoard = (me, student) =>
   !!student && (sameCode(me.code, student.code) || isTeacherOf(me, student));
 
-const studentListOf = (users, teacherCode) =>
+// 선생님은 모든 학생을 볼 수 있음 (코드 등록 불필요 — 앱을 선생님 학생들하고만 씀)
+const studentListOf = (users) =>
   users
-    .filter((u) => String(u.teacherCode || '').toLowerCase() === String(teacherCode).toLowerCase())
+    .filter((u) => u.role !== 'teacher')
     .map((u) => ({ code: u.code, nickname: u.nickname }));
 
 const cleanStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -762,67 +763,14 @@ app.post('/api/tutor/admin/activate', requireSession, async (req, res) => {
   }
 });
 
-// ---- 학생 등록 (선생님만) ----
-app.post('/api/tutor/students', requireSession, async (req, res) => {
-  try {
-    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 학생을 등록할 수 있어요.' });
-    const studentCode = String(req.body?.studentCode || '').trim();
-    if (!studentCode) return res.status(400).json({ error: '학생 코드를 입력해주세요.' });
-    if (sameCode(studentCode, req.me.code)) return res.status(400).json({ error: '자기 자신은 등록할 수 없어요.' });
-    const record = await readBin(USERS_BIN);
-    const users = record.users || [];
-    const student = findUserByCode(users, studentCode);
-    if (!student) return res.status(404).json({ error: '해당 코드의 사용자를 찾을 수 없어요.' });
-    if (student.teacherCode && !sameCode(student.teacherCode, req.me.code)) {
-      return res.status(409).json({ error: '이미 다른 선생님에게 등록된 학생이에요.' });
-    }
-    const meCode = req.me.code;
-    const updated = users.map((u) => {
-      if (sameCode(u.code, student.code)) return { ...withTutorDefaults(u), teacherCode: meCode };
-      if (sameCode(u.code, meCode)) {
-        const v = withTutorDefaults(u);
-        const codes = v.studentCodes.some((c) => sameCode(c, student.code)) ? v.studentCodes : [...v.studentCodes, student.code];
-        return { ...v, studentCodes: codes };
-      }
-      return u;
-    });
-    await writeBin(USERS_BIN, { ...record, users: updated });
-    res.json({ students: studentListOf(updated, meCode) });
-  } catch {
-    res.status(500).json({ error: '학생 등록에 실패했어요.' });
-  }
-});
-
 // ---- 학생 목록 ----
 app.get('/api/tutor/students', requireSession, async (req, res) => {
   try {
     if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 조회할 수 있어요.' });
     const record = await readBin(USERS_BIN);
-    res.json({ students: studentListOf(record.users || [], req.me.code) });
+    res.json({ students: studentListOf(record.users || []) });
   } catch {
     res.status(500).json({ error: '학생 목록을 불러오지 못했어요.' });
-  }
-});
-
-// ---- 학생 등록 해제 ----
-app.delete('/api/tutor/students/:code', requireSession, async (req, res) => {
-  try {
-    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 해제할 수 있어요.' });
-    const record = await readBin(USERS_BIN);
-    const users = record.users || [];
-    const student = findUserByCode(users, req.params.code);
-    if (!student || !isTeacherOf(req.me, student)) return res.status(404).json({ error: '내 학생이 아니에요.' });
-    const updated = users.map((u) => {
-      if (sameCode(u.code, student.code)) return { ...u, teacherCode: null };
-      if (sameCode(u.code, req.me.code)) {
-        return { ...u, studentCodes: (u.studentCodes || []).filter((c) => !sameCode(c, student.code)) };
-      }
-      return u;
-    });
-    await writeBin(USERS_BIN, { ...record, users: updated });
-    res.json({ students: studentListOf(updated, req.me.code) });
-  } catch {
-    res.status(500).json({ error: '등록 해제에 실패했어요.' });
   }
 });
 
@@ -859,7 +807,7 @@ app.get('/api/tutor/students/summary', requireSession, async (req, res) => {
     };
 
     const students = users
-      .filter((u) => String(u.teacherCode || '').toLowerCase() === String(req.me.code).toLowerCase())
+      .filter((u) => u.role !== 'teacher')
       .map((u) => {
         const v = withTutorDefaults(u);
         const recs = v.studyRecords || [];
