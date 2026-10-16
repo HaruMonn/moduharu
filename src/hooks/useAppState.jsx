@@ -4,7 +4,7 @@ import html2canvas from 'html2canvas';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
-import { COLOR_OPTIONS, TIMER_COLORS } from '../constants.js';
+import { COLOR_OPTIONS, TIMER_COLORS, APP_VERSION } from '../constants.js';
 
 // =================== [백엔드 API 연동 설정] ===================
 // 개발(브라우저): '/api' (Vite 프록시)
@@ -295,6 +295,32 @@ export function useAppState() {
     try { localStorage.setItem('lifestyle_admin_mode', val ? 'true' : 'false'); } catch { /* 무시 */ }
     setAdminModeState(val);
   };
+
+  // =================== [인앱 업데이트 확인] ===================
+  const [updateInfo, setUpdateInfo] = useState(null); // {version, apkUrl, notes}
+  const [showUpdate, setShowUpdate] = useState(false);
+  const checkForUpdate = async (manual = false) => {
+    try {
+      const res = await fetch(`${API_BASE}/app/version`);
+      if (!res.ok) throw new Error('version check failed');
+      const data = await res.json();
+      if ((Number(data.version) || 0) > APP_VERSION) {
+        setUpdateInfo({ version: Number(data.version), apkUrl: data.apkUrl || '', notes: data.notes || '' });
+        setShowUpdate(true);
+        return true;
+      }
+      if (manual) alert(`최신 버전이에요! (v${APP_VERSION})`);
+      return false;
+    } catch {
+      if (manual) alert('업데이트 확인에 실패했어요. 인터넷 연결을 확인해주세요.');
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    checkForUpdate(false);
+  }, []);
 
   // =================== [과외 모드 상태] ===================
   const [tutorStudents, setTutorStudents] = useState([]); // [{code, nickname}]
@@ -1660,6 +1686,7 @@ export function useAppState() {
     verifyAdmin, logoutAdmin, handleSignup, handleLogin, handleLogout, fetchFriends,
     addFriend, acceptFriend, rejectFriend, removeFriend, fetchAnnouncements, addAnnouncement, deleteAnnouncement,
     adminMode, setAdminMode, fetchAdminStatus, activateAdminMode,
+    updateInfo, showUpdate, setShowUpdate, checkForUpdate,
     fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
     openTutorBoard, saveTutorBoard, fetchMyBoard, syncStudyRecords,
     tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError, setTutorError,
