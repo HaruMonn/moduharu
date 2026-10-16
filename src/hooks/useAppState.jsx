@@ -110,27 +110,6 @@ export function useAppState() {
   // =================== [뒤로가기 두 번 눌러 종료 (안드로이드)] ===================
   const [exitToast, setExitToast] = useState(false);
 
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    let lastBack = 0;
-    let toastTimer = null;
-    const listener = CapApp.addListener('backButton', () => {
-      const now = Date.now();
-      if (now - lastBack < 2000) {
-        CapApp.exitApp();
-      } else {
-        lastBack = now;
-        setExitToast(true);
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => setExitToast(false), 2000);
-      }
-    });
-    return () => {
-      listener.remove();
-      clearTimeout(toastTimer);
-    };
-  }, []);
-
   // =================== [테마 색상 커스텀] ===================
   const [themeColor, setThemeColor] = useState(() => {
     const saved = localStorage.getItem('lifestyle_themeColor');
@@ -351,6 +330,33 @@ export function useAppState() {
   const [announceTitle, setAnnounceTitle] = useState('');
   const [announceBody, setAnnounceBody] = useState('');
   const [lastSeenAnnounce, setLastSeenAnnounce] = useState(() => Number(localStorage.getItem('lifestyle_lastAnnounce') || 0));
+
+  // =================== [뒤로가기: 모달 열려있으면 닫기, 없으면 두 번 눌러 종료] ===================
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let lastBack = 0;
+    let toastTimer = null;
+    const listener = CapApp.addListener('backButton', () => {
+      // 열린 모달이 있으면 모달을 닫고 종료하지 않음
+      if (showSettings) { setShowSettings(false); return; }
+      if (showUpdate) { setShowUpdate(false); return; }
+      if (showPolicy) { setShowPolicy(false); return; }
+      if (showNotif) { setShowNotif(false); return; }
+      const now = Date.now();
+      if (now - lastBack < 2000) {
+        CapApp.exitApp();
+      } else {
+        lastBack = now;
+        setExitToast(true);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => setExitToast(false), 2000);
+      }
+    });
+    return () => {
+      listener.remove();
+      clearTimeout(toastTimer);
+    };
+  }, [showSettings, showUpdate, showPolicy, showNotif]);
 
   // =================== [관리자 상태] ===================
   const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('lifestyle_admin') === 'true');
@@ -792,6 +798,36 @@ export function useAppState() {
 // 마운트 시 1회성 데이터 로딩 — SPA 표준 패턴이므로 의도적 예외 처리
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAnnouncements(); }, []);
+
+  // ---- 새 공지 폴링 (60초마다) — 공지가 새로 올라오면 학생 폰에 알림 ----
+  const seenAnnounceRef = useRef({ maxId: 0, init: false });
+  useEffect(() => {
+    const t = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/announcements`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = data.announcements || [];
+        setAnnouncements(list);
+        const maxId = list.reduce((m, a) => Math.max(m, Number(a.id) || 0), 0);
+        const st = seenAnnounceRef.current;
+        if (!st.init) {
+          st.maxId = maxId;
+          st.init = true;
+          return;
+        }
+        if (maxId > st.maxId) {
+          const fresh = list.filter((a) => (Number(a.id) || 0) > st.maxId);
+          if (fresh.length > 0) {
+            sendNotification('📢 새 공지가 있어요!', fresh[0].title || '');
+          }
+          st.maxId = maxId;
+        }
+      } catch { /* 폴링 실패는 조용히 무시 */ }
+    }, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendNotification]);
 
   // ---- 공지 등록 (관리자만) ----
   const addAnnouncement = async () => {
@@ -1586,8 +1622,11 @@ export function useAppState() {
             <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-purple-800"></span>
           )}
         </button>
-        <button onClick={() => setShowSettings(true)} className="p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
+        <button onClick={() => setShowSettings(true)} className="relative p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
           <Settings size={20} />
+          {updateInfo && (
+            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-purple-800"></span>
+          )}
         </button>
         {activeTab === 'timetable' && (
           <button onClick={() => openModal()} className="p-2.5 rounded-full bg-slate-800 text-white dark:bg-purple-200 dark:text-purple-950 hover:opacity-80 transition shadow-md">
