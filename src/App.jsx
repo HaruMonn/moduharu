@@ -875,7 +875,7 @@ export default function App() {
                 <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200"><Download size={18} className="text-emerald-500"/> 앱 업데이트</div>
-                    <button onClick={() => checkForUpdate(true)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold hover:opacity-90 transition">확인하기</button>
+                    <button onClick={() => checkForUpdate(true)} className={`px-3 py-2 rounded-xl text-white text-sm font-bold hover:opacity-90 transition ${updateInfo ? 'bg-red-500' : 'bg-emerald-500'}`}>확인하기</button>
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-2">현재 버전: v{APP_VERSION}</p>
                 </div>
