@@ -422,20 +422,22 @@ export function useAppState() {
 
   // ---- 로그아웃 ----
   const handleLogout = async () => {
+    // 서버 로그아웃은 기다리지 않고 백그라운드로 (서버가 자고 있어도 로그아웃이 멈추지 않게)
     try {
       if (currentUser?.code && sessionToken) {
-        await fetch(`${API_BASE}/users/logout`, {
+        fetch(`${API_BASE}/users/logout`, {
           method: 'POST',
           headers: { 'x-user-code': currentUser.code, 'x-session-token': sessionToken },
-        });
+        }).catch(() => { /* 서버 로그아웃 실패는 무시 */ });
       }
-    } catch (e) { console.error(e); }
+    } catch { /* 무시 */ }
     localStorage.removeItem('lifestyle_user');
     localStorage.removeItem('lifestyle_token');
     setCurrentUser(null);
     setSessionToken('');
     setAdminMode(false);
     setTutorStudents([]); setTutorSummaries({}); setTutorBoard(null); setTutorRecords([]); setTutorView('home');
+    setShowSettings(false);
   };
 
   // =================== [과외 모드 API] ===================
