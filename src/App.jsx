@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
-import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS } from './constants.js';
+import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS, APP_VERSION } from './constants.js';
 import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Trophy, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
@@ -30,6 +30,7 @@ export default function App() {
     handleSignup, handleLogin, handleLogout, addFriend, acceptFriend, rejectFriend, removeFriend,
     addAnnouncement, deleteAnnouncement,
     adminMode, setAdminMode, fetchAdminStatus, activateAdminMode,
+    updateInfo, showUpdate, setShowUpdate, checkForUpdate,
     fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
     openTutorBoard, saveTutorBoard, fetchMyBoard,
     tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
@@ -1094,6 +1095,15 @@ export default function App() {
                   )}
                 </div>
 
+                {/* 앱 업데이트 확인 */}
+                <div className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200"><Download size={18} className="text-emerald-500"/> 앱 업데이트</div>
+                    <button onClick={() => checkForUpdate(true)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold hover:opacity-90 transition">확인하기</button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-2">현재 버전: v{APP_VERSION}</p>
+                </div>
+
                 {/* 서버 주소 설정 (고급) */}
                 <details className="bg-slate-50 dark:bg-purple-950 rounded-2xl p-4 border border-slate-100 dark:border-purple-800">
                   <summary className="flex items-center gap-2 font-bold text-slate-700 dark:text-purple-200 cursor-pointer list-none"><Server size={18} className="text-sky-500"/> 서버 주소 <span className="text-[10px] font-bold text-slate-400 ml-auto">고급</span></summary>
@@ -1247,6 +1257,28 @@ export default function App() {
                   {adminPinBusy ? '확인 중...' : adminPinMode === 'setup' ? '설정하기' : '켜기'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================= 앱 업데이트 모달 ======================= */}
+        {showUpdate && updateInfo && (
+          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/40 dark:bg-purple-950/80 backdrop-blur-sm animate-in fade-in duration-200 p-6">
+            <div className="bg-white dark:bg-purple-900 rounded-3xl p-6 shadow-2xl w-full max-w-xs animate-in zoom-in-95 duration-200">
+              <div className="text-3xl mb-2 text-center">🎉</div>
+              <h2 className="text-lg font-black text-center text-slate-700 dark:text-purple-100 mb-1">새 버전이 나왔어요!</h2>
+              <p className="text-xs text-slate-400 dark:text-purple-400 font-bold text-center mb-3">v{updateInfo.version}{updateInfo.notes ? ` · ${updateInfo.notes}` : ''}</p>
+              <div className="flex flex-col gap-2">
+                {updateInfo.apkUrl ? (
+                  <button onClick={() => window.open(updateInfo.apkUrl, '_system')} className="w-full py-3 rounded-xl font-bold text-sm bg-indigo-500 text-white hover:opacity-90">지금 업데이트</button>
+                ) : (
+                  <button onClick={() => window.open('https://github.com/HaruMonn/moduharu/actions', '_system')} className="w-full py-3 rounded-xl font-bold text-sm bg-indigo-500 text-white hover:opacity-90">GitHub에서 받기</button>
+                )}
+                <button onClick={() => setShowUpdate(false)} className="w-full py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300 hover:opacity-80">나중에</button>
+              </div>
+              {!updateInfo.apkUrl && (
+                <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold text-center mt-3">Actions → 최신 실행 → Artifacts에서 moduharu-debug-apk를 받아 설치하세요</p>
+              )}
             </div>
           </div>
         )}
