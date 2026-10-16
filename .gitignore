@@ -42,3 +42,8 @@ android/app/src/main/assets/public/
 *.njsproj
 *.sln
 *.sw?
+
+# 앱 아이콘 PNG (scripts/write-icons.cjs가 빌드 시 생성)
+android/app/src/main/res/mipmap-*/ic_launcher*.png
+public/icons/icon-*.png
+public/icons/maskable-*.png
