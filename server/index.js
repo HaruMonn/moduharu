@@ -703,6 +703,21 @@ app.post('/api/users/logout', requireSession, async (req, res) => {
   }
 });
 
+// ---- 앱 최신 버전 정보 (인앱 업데이트 확인용) ----
+app.get('/api/app/version', async (req, res) => {
+  try {
+    const raw = await fs.promises.readFile(path.join(__dirname, '..', 'app-release.json'), 'utf-8');
+    const info = JSON.parse(raw);
+    res.json({
+      version: Number(info.version) || 0,
+      apkUrl: typeof info.apkUrl === 'string' ? info.apkUrl : '',
+      notes: typeof info.notes === 'string' ? info.notes : '',
+    });
+  } catch {
+    res.json({ version: 0, apkUrl: '', notes: '' });
+  }
+});
+
 // ---- 내 정보 조회 (역할/담당선생 갱신용) ----
 app.get('/api/tutor/me', requireSession, async (req, res) => {
   try {

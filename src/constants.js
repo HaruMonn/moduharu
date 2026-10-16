@@ -9,3 +9,9 @@ export const COLOR_OPTIONS = [
 export const TIMER_COLORS = [
   'bg-indigo-400', 'bg-rose-400', 'bg-teal-400', 'bg-amber-400', 'bg-sky-400', 'bg-violet-400'
 ];
+
+// 요일 순서: 일 월 화 수 목 금 토 (getDay()와 인덱스가 일치)
+export const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+// 앱 버전 (app-release.json의 version과 함께 올림 — 푸시할 때마다 +1)
+export const APP_VERSION = 1;
