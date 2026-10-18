@@ -163,6 +163,54 @@ app.delete('/api/requests/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// =================== 모의고사 기출문제 (로그인 사용자 읽기, 선생님만 등록/삭제) ===================
+app.get('/api/exam-questions', requireSession, async (req, res) => {
+  try {
+    const record = await readBin(REQUESTS_BIN);
+    const questions = (record.questions || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ questions });
+  } catch {
+    res.status(500).json({ error: '기출문제를 불러오지 못했어요.' });
+  }
+});
+
+app.post('/api/exam-questions', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님만 등록할 수 있어요.' });
+    const { title, subject, source, description, fileUrl } = req.body || {};
+    if (!title?.trim()) return res.status(400).json({ error: '제목을 입력해주세요.' });
+    const record = await readBin(REQUESTS_BIN);
+    const questions = record.questions || [];
+    const newQuestion = {
+      id: Date.now(),
+      title: title.trim(),
+      subject: subject?.trim() || '',
+      source: source?.trim() || '',
+      description: description?.trim() || '',
+      fileUrl: fileUrl?.trim() || '',
+      createdAt: new Date().toISOString(),
+    };
+    questions.unshift(newQuestion);
+    await writeBin(REQUESTS_BIN, { ...record, questions });
+    res.json({ questions: questions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
+  } catch {
+    res.status(500).json({ error: '기출문제 등록에 실패했어요.' });
+  }
+});
+
+app.delete('/api/exam-questions/:id', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님만 삭제할 수 있어요.' });
+    const id = Number(req.params.id);
+    const record = await readBin(REQUESTS_BIN);
+    const questions = (record.questions || []).filter((q) => q.id !== id);
+    await writeBin(REQUESTS_BIN, { ...record, questions });
+    res.json({ questions: questions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) });
+  } catch {
+    res.status(500).json({ error: '기출문제 삭제에 실패했어요.' });
+  }
+});
+
 // =================== 랭킹 (공개 읽기/등록) ===================
 app.get('/api/rankings', async (req, res) => {
   try {

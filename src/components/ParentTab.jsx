@@ -1,11 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { ChevronLeft, Users } from 'lucide-react';
+import ExamQuestionsSection from './ExamQuestionsSection.jsx';
 
 // 학부모용: 연결된 자녀 목록 + 자녀 보드 읽기 전용 보기
 export default function ParentTab({
   currentUser, renderHeader,
   parentChildren, parentChildBoard, setParentChildBoard,
   parentChildRecords, parentLoading, fetchParentChildren, openParentChildBoard,
+  examQuestions, examQuestionsLoading,
 }) {
   const [selectedCode, setSelectedCode] = useState(null);
 
@@ -135,6 +137,10 @@ export default function ParentTab({
                 <p className="text-xs text-slate-400 font-bold mt-1">공부 기록 · 숙제 · 시간표 보기</p>
               </button>
             ))}
+            <ExamQuestionsSection
+              examQuestions={examQuestions} examQuestionsLoading={examQuestionsLoading}
+              isTeacher={false}
+            />
           </>
         )}
       </div>

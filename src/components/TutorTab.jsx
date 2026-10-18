@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Plus, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Bar } from 'react-chartjs-2';
 import { COLOR_OPTIONS, DAY_LABELS, NOTION_SITE_URL } from '../constants.js';
+import ExamQuestionsSection from './ExamQuestionsSection.jsx';
 
 // =================== 과외 모드 컴포넌트 ===================
 
@@ -228,6 +229,7 @@ export default function TutorTab({
   tutorView, setTutorView,
   adminMode, openTutorBoard, saveTutorBoard, fetchTutorStudents,
   tutorParents, linkParentChild, unlinkParentChild,
+  examQuestions, examQuestionsLoading, addExamQuestion, deleteExamQuestion,
 }) {
   const [boardModal, setBoardModal] = useState(null); // {section, item} | null
   const [linkSelect, setLinkSelect] = useState({}); // {parentCode: studentCode}
@@ -439,6 +441,11 @@ export default function TutorTab({
                 </div>
               )}
             </div>
+            <ExamQuestionsSection
+              examQuestions={examQuestions} examQuestionsLoading={examQuestionsLoading}
+              addExamQuestion={addExamQuestion} deleteExamQuestion={deleteExamQuestion}
+              isTeacher={true}
+            />
           </>
         )
       ) : (
@@ -464,6 +471,10 @@ export default function TutorTab({
                 renderMeta={tutorScheduleMeta} allowAdd={false} allowEdit={false} />
               <BoardSection title="숙제" emoji="📝" items={tutorBoard.board.homework} emptyText="등록된 숙제가 없어요"
                 renderMeta={tutorHomeworkMeta} onToggle={toggleHomeworkDone} allowAdd={false} allowEdit={false} />
+              <ExamQuestionsSection
+                examQuestions={examQuestions} examQuestionsLoading={examQuestionsLoading}
+                isTeacher={false}
+              />
             </>
           ) : (
             <p className="text-xs text-slate-400 font-bold text-center py-10">보드를 불러오지 못했어요. 탭을 다시 열어주세요.</p>
