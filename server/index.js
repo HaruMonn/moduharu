@@ -229,13 +229,14 @@ app.post('/api/rankings', async (req, res) => {
 // =================== 사용자 (가입/로그인/코드 조회) ===================
 app.post('/api/users/signup', async (req, res) => {
   try {
-    const { id, password, nickname } = req.body || {};
+    const { id, password, nickname, role } = req.body || {};
     // 서버 측 입력 검증
     const cleanId = typeof id === 'string' ? id.trim() : '';
     const cleanNickname = typeof nickname === 'string' ? nickname.trim() : '';
     if (!/^[A-Za-z0-9]{4,}$/.test(cleanId)) return res.status(400).json({ error: '아이디는 4자 이상의 영문/숫자 조합이어야 해요.' });
     if (typeof password !== 'string' || password.length < 4) return res.status(400).json({ error: '비밀번호는 4자 이상이어야 해요.' });
     if (cleanNickname.length < 1 || cleanNickname.length > 20) return res.status(400).json({ error: '닉네임은 1~20자여야 해요.' });
+    const userRole = role === 'parent' ? 'parent' : 'student';
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
     if (users.some((u) => u.id === cleanId)) return res.status(409).json({ error: '이미 사용 중인 아이디예요.' });
@@ -248,7 +249,7 @@ app.post('/api/users/signup', async (req, res) => {
     const newUser = {
       id: cleanId, password: hashed, nickname: cleanNickname, code,
       friends: [], friendRequests: [], createdAt: new Date().toISOString(),
-      role: 'student', teacherCode: null, studentCodes: [],
+      role: userRole, teacherCode: null, studentCodes: [], linkedChildren: [],
       board: { timetable: [], schedule: [], homework: [] }, studyRecords: [], sessions: [],
     };
     users.push(newUser);
@@ -595,8 +596,14 @@ const withTutorDefaults = (u) => {
 const isTeacherOf = (teacher, student) =>
   !!teacher && !!student && teacher.role === 'teacher';
 
-// 학생 본인 또는 담당 선생님만 접근 가능
+// 학생 본인 / 선생님 / 연결된 학부모만 조회 가능
+const isParentOf = (parent, student) =>
+  !!parent && !!student && parent.role === 'parent' &&
+  (parent.linkedChildren || []).some((c) => sameCode(c, student.code));
 const canAccessBoard = (me, student) =>
+  !!student && (sameCode(me.code, student.code) || isTeacherOf(me, student) || isParentOf(me, student));
+// 쓰기는 학생 본인 / 선생님만 (학부모는 읽기 전용)
+const canWriteBoard = (me, student) =>
   !!student && (sameCode(me.code, student.code) || isTeacherOf(me, student));
 
 // 선생님은 모든 학생을 볼 수 있음 (코드 등록 불필요 — 앱을 선생님 학생들하고만 씀)
@@ -835,6 +842,84 @@ app.get('/api/tutor/students/summary', requireSession, async (req, res) => {
   }
 });
 
+// ---- 학부모 목록 (선생님만) ----
+app.get('/api/tutor/parents', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 조회할 수 있어요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const parents = users
+      .filter((u) => u.role === 'parent')
+      .map((u) => ({
+        code: u.code,
+        nickname: u.nickname,
+        linkedChildren: (u.linkedChildren || []).map((cc) => {
+          const child = findUserByCode(users, cc);
+          return child ? { code: child.code, nickname: child.nickname } : null;
+        }).filter(Boolean),
+      }));
+    res.json({ parents });
+  } catch {
+    res.status(500).json({ error: '학부모 목록을 불러오지 못했어요.' });
+  }
+});
+
+// ---- 학부모-자녀 연결 (선생님만) ----
+app.post('/api/tutor/parents/link', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 연결할 수 있어요.' });
+    const { parentCode, studentCode } = req.body || {};
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const parent = findUserByCode(users, parentCode);
+    const student = findUserByCode(users, studentCode);
+    if (!parent || parent.role !== 'parent') return res.status(404).json({ error: '학부모를 찾을 수 없어요.' });
+    if (!student || student.role === 'teacher') return res.status(404).json({ error: '학생을 찾을 수 없어요.' });
+    parent.linkedChildren = parent.linkedChildren || [];
+    if (!parent.linkedChildren.some((c) => sameCode(c, student.code))) {
+      parent.linkedChildren.push(student.code);
+    }
+    await writeBin(USERS_BIN, { ...record, users });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: '연결에 실패했어요.' });
+  }
+});
+
+// ---- 학부모-자녀 연결 해제 (선생님만) ----
+app.delete('/api/tutor/parents/link', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'teacher') return res.status(403).json({ error: '선생님 계정만 해제할 수 있어요.' });
+    const { parentCode, studentCode } = req.body || {};
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const parent = findUserByCode(users, parentCode);
+    if (!parent || parent.role !== 'parent') return res.status(404).json({ error: '학부모를 찾을 수 없어요.' });
+    parent.linkedChildren = (parent.linkedChildren || []).filter((c) => !sameCode(c, studentCode));
+    await writeBin(USERS_BIN, { ...record, users });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: '해제에 실패했어요.' });
+  }
+});
+
+// ---- 내 자녀 목록 (학부모 본인) ----
+app.get('/api/tutor/my-children', requireSession, async (req, res) => {
+  try {
+    if (req.me.role !== 'parent') return res.status(403).json({ error: '학부모 계정만 조회할 수 있어요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const me = findUserByCode(users, req.me.code);
+    const children = (me?.linkedChildren || []).map((cc) => {
+      const child = findUserByCode(users, cc);
+      return child ? { code: child.code, nickname: child.nickname } : null;
+    }).filter(Boolean);
+    res.json({ children });
+  } catch {
+    res.status(500).json({ error: '자녀 목록을 불러오지 못했어요.' });
+  }
+});
+
 // ---- 학생 보드 조회 (학생 본인 / 담당 선생님만) ----
 app.get('/api/tutor/board/:code', requireSession, async (req, res) => {
   try {
@@ -853,7 +938,7 @@ app.put('/api/tutor/board/:code', requireSession, async (req, res) => {
     const record = await readBin(USERS_BIN);
     const users = record.users || [];
     const student = findUserByCode(users, req.params.code);
-    if (!canAccessBoard(req.me, student)) return res.status(403).json({ error: '수정할 수 있는 권한이 없어요.' });
+    if (!canWriteBoard(req.me, student)) return res.status(403).json({ error: '수정할 수 있는 권한이 없어요.' });
     const { board } = req.body || {};
     const timetable = validateBoardSection(board?.timetable, 'timetable');
     const schedule = validateBoardSection(board?.schedule, 'schedule');

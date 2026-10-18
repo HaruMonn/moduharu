@@ -227,8 +227,10 @@ export default function TutorTab({
   tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
   tutorView, setTutorView,
   adminMode, openTutorBoard, saveTutorBoard, fetchTutorStudents,
+  tutorParents, linkParentChild, unlinkParentChild,
 }) {
   const [boardModal, setBoardModal] = useState(null); // {section, item} | null
+  const [linkSelect, setLinkSelect] = useState({}); // {parentCode: studentCode}
 
   const handleBoardSave = (section, item) => {
     if (!tutorBoard) return;
@@ -387,6 +389,53 @@ export default function TutorTab({
                     </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+            <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
+              <h3 className="font-black text-slate-700 dark:text-purple-100 mb-3">👨‍👩‍👧 학부모 관리 <span className="text-xs text-slate-400">({(tutorParents || []).length})</span></h3>
+              {(tutorParents || []).length === 0 ? (
+                <p className="text-xs text-slate-400 font-bold text-center py-3">가입한 학부모가 없어요.</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {(tutorParents || []).map((p) => (
+                    <div key={p.code} className="bg-slate-50 dark:bg-purple-950/60 rounded-2xl p-3">
+                      <p className="text-sm font-bold text-slate-700 dark:text-purple-100 mb-2">{p.nickname}</p>
+                      {(p.linkedChildren || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {(p.linkedChildren || []).map((c) => (
+                            <span key={c.code} className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 px-2 py-1 rounded-full">
+                              {c.nickname}
+                              <button onClick={() => unlinkParentChild(p.code, c.code)} className="text-emerald-400 hover:text-red-500 font-black">×</button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-1.5">
+                        <select
+                          value={linkSelect[p.code] || ''}
+                          onChange={(e) => setLinkSelect({ ...linkSelect, [p.code]: e.target.value })}
+                          className="flex-1 text-xs font-bold bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-700 rounded-xl px-2 py-1.5 outline-none"
+                        >
+                          <option value="">학생 선택</option>
+                          {(tutorStudents || []).map((s) => (
+                            <option key={s.code} value={s.code}>{s.nickname}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            if (linkSelect[p.code]) {
+                              linkParentChild(p.code, linkSelect[p.code]);
+                              setLinkSelect({ ...linkSelect, [p.code]: '' });
+                            }
+                          }}
+                          className="text-xs font-bold bg-indigo-500 text-white px-3 py-1.5 rounded-xl hover:opacity-90"
+                        >
+                          연결
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
