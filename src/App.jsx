@@ -39,6 +39,7 @@ export default function App() {
     parentChildren, parentChildBoard, setParentChildBoard, parentChildRecords, parentLoading,
     fetchParentChildren, openParentChildBoard, tutorParents, fetchTutorParents,
     linkParentChild, unlinkParentChild,
+    examQuestions, examQuestionsLoading, fetchExamQuestions, addExamQuestion, deleteExamQuestion,
     newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
     setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
@@ -89,6 +90,7 @@ export default function App() {
     if (!adminMode && !tutorBoard) fetchMyBoard();
     if (adminMode && tutorView === 'home' && tutorStudents.length === 0) fetchTutorStudents();
     if (adminMode && tutorView === 'home') fetchTutorParents();
+    fetchExamQuestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, adminMode]);
 
@@ -739,6 +741,7 @@ export default function App() {
             parentChildren={parentChildren} parentChildBoard={parentChildBoard} setParentChildBoard={setParentChildBoard}
             parentChildRecords={parentChildRecords} parentLoading={parentLoading}
             fetchParentChildren={fetchParentChildren} openParentChildBoard={openParentChildBoard}
+            examQuestions={examQuestions} examQuestionsLoading={examQuestionsLoading}
           />
         ) : activeTab === 'tutor' && (
           <TutorTab
@@ -754,6 +757,8 @@ export default function App() {
             saveTutorBoard={saveTutorBoard} fetchTutorStudents={fetchTutorStudents} adminMode={adminMode}
             tutorParents={tutorParents}
             linkParentChild={linkParentChild} unlinkParentChild={unlinkParentChild}
+            examQuestions={examQuestions} examQuestionsLoading={examQuestionsLoading}
+            addExamQuestion={addExamQuestion} deleteExamQuestion={deleteExamQuestion}
           />
         )}
 
