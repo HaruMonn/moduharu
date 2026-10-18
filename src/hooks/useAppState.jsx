@@ -262,6 +262,7 @@ export function useAppState() {
   const [authPassword, setAuthPassword] = useState('');
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState('');
   const [authNickname, setAuthNickname] = useState('');
+  const [signupRole, setSignupRole] = useState('student'); // 'student' | 'parent'
   const [authError, setAuthError] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem('lifestyle_token') || '');
@@ -322,6 +323,12 @@ export function useAppState() {
   const [tutorError, setTutorError] = useState('');
   const [tutorStudentCodeInput, setTutorStudentCodeInput] = useState('');
   const [tutorView, setTutorView] = useState('home'); // 'home' | 'student'
+  // 학부모용 상태
+  const [parentChildren, setParentChildren] = useState([]); // [{code, nickname}]
+  const [parentChildBoard, setParentChildBoard] = useState(null); // {code, nickname, board}
+  const [parentChildRecords, setParentChildRecords] = useState([]);
+  const [parentLoading, setParentLoading] = useState(false);
+  const [tutorParents, setTutorParents] = useState([]); // [{code, nickname, linkedChildren}]
   const [friends, setFriends] = useState([]); // {code, nickname}[]
   const [friendRequests, setFriendRequests] = useState([]); // 받은 친구 요청 {fromCode, fromNickname, at}[]
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -418,7 +425,7 @@ export function useAppState() {
       const res = await fetch(`${API_BASE}/users/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, password: pw, nickname: nick })
+        body: JSON.stringify({ id, password: pw, nickname: nick, role: signupRole })
       });
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || '가입에 실패했어요.'); setAuthBusy(false); return; }
@@ -579,6 +586,58 @@ export function useAppState() {
       setTutorView('student');
     } catch (e) { setTutorError(e.message); }
     finally { setTutorLoading(false); }
+  };
+
+  // ---- 학부모용: 내 자녀 목록 ----
+  const fetchParentChildren = async () => {
+    setParentLoading(true);
+    try {
+      const data = await tutorFetch('/tutor/my-children');
+      setParentChildren(data.children || []);
+    } catch (e) { console.error(e); }
+    finally { setParentLoading(false); }
+  };
+
+  // ---- 학부모용: 자녀 보드 열기 (읽기 전용) ----
+  const openParentChildBoard = async (code) => {
+    setParentLoading(true);
+    try {
+      const [b, r] = await Promise.all([
+        tutorFetch(`/tutor/board/${encodeURIComponent(code)}`),
+        tutorFetch(`/tutor/records/${encodeURIComponent(code)}?days=30`),
+      ]);
+      setParentChildBoard({ code: b.code, nickname: b.nickname, board: b.board });
+      setParentChildRecords(r.records || []);
+    } catch (e) { console.error(e); }
+    finally { setParentLoading(false); }
+  };
+
+  // ---- 선생님용: 학부모 목록 ----
+  const fetchTutorParents = async () => {
+    try {
+      const data = await tutorFetch('/tutor/parents');
+      setTutorParents(data.parents || []);
+    } catch (e) { console.error(e); }
+  };
+
+  // ---- 선생님용: 학부모-자녀 연결 ----
+  const linkParentChild = async (parentCode, studentCode) => {
+    try {
+      await tutorFetch('/tutor/parents/link', {
+        method: 'POST', body: JSON.stringify({ parentCode, studentCode }),
+      });
+      await fetchTutorParents();
+    } catch (e) { setTutorError(e.message); }
+  };
+
+  // ---- 선생님용: 학부모-자녀 연결 해제 ----
+  const unlinkParentChild = async (parentCode, studentCode) => {
+    try {
+      await tutorFetch('/tutor/parents/link', {
+        method: 'DELETE', body: JSON.stringify({ parentCode, studentCode }),
+      });
+      await fetchTutorParents();
+    } catch (e) { setTutorError(e.message); }
   };
 
   const saveTutorBoard = async (board) => {
@@ -1728,7 +1787,7 @@ export function useAppState() {
     setRankings, rankingLoading, setRankingLoading, rankingReady, setRankingReady, rankingFilter, setRankingFilter, calcMyScore,
     getScoreBreakdown, fetchRankings, submitMyScore, currentUser, setCurrentUser, authMode,
     setAuthMode, authId, setAuthId, authPassword, setAuthPassword, authPasswordConfirm,
-    setAuthPasswordConfirm, authNickname, setAuthNickname, authError, setAuthError, authBusy,
+    setAuthPasswordConfirm, authNickname, setAuthNickname, signupRole, setSignupRole, authError, setAuthError, authBusy,
     setAuthBusy, sessionToken, setSessionToken, refreshMyUser,
     friends, setFriends, friendRequests, setFriendRequests, friendCodeInput,
     setFriendCodeInput, announcements, setAnnouncements, showNotif, setShowNotif, announceTitle,
@@ -1742,6 +1801,9 @@ export function useAppState() {
     openTutorBoard, saveTutorBoard, fetchMyBoard, syncStudyRecords,
     tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError, setTutorError,
     tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
+    parentChildren, setParentChildren, parentChildBoard, setParentChildBoard,
+    parentChildRecords, parentLoading, fetchParentChildren, openParentChildBoard,
+    tutorParents, fetchTutorParents, linkParentChild, unlinkParentChild,
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
     setFormTitle, formStart, setFormStart, formEnd, setFormEnd, formColor,

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
+import ParentTab from './components/ParentTab.jsx';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS, APP_VERSION } from './constants.js';
 import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
@@ -23,7 +24,7 @@ export default function App() {
     requestsError, newRequestTitle, setNewRequestTitle, newRequestBody, setNewRequestBody, newRequestCategory,
     setNewRequestCategory,
     currentUser, authMode, setAuthMode, authId, setAuthId, authPassword,
-    setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, authError,
+    setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authNickname, setAuthNickname, signupRole, setSignupRole, authError,
     setAuthError, authBusy, friendRequests,
     announcements, showNotif, setShowNotif, announceTitle, setAnnounceTitle, announceBody,
     setAnnounceBody, isAdmin, adminTokenInput, setAdminTokenInput, verifyAdmin, logoutAdmin,
@@ -35,6 +36,9 @@ export default function App() {
     openTutorBoard, saveTutorBoard, fetchMyBoard,
     tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
     tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
+    parentChildren, parentChildBoard, setParentChildBoard, parentChildRecords, parentLoading,
+    fetchParentChildren, openParentChildBoard, tutorParents, fetchTutorParents,
+    linkParentChild, unlinkParentChild,
     newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
     setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
@@ -84,6 +88,7 @@ export default function App() {
     if (activeTab !== 'tutor' || !currentUser) return;
     if (!adminMode && !tutorBoard) fetchMyBoard();
     if (adminMode && tutorView === 'home' && tutorStudents.length === 0) fetchTutorStudents();
+    if (adminMode && tutorView === 'home') fetchTutorParents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, adminMode]);
 
@@ -166,6 +171,13 @@ export default function App() {
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">닉네임 <span className="text-slate-400">(영어·한글·한자·히라가나·특수문자)</span></label>
                   <input type="text" value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} placeholder="예: 하루몽, はる, 太郎" maxLength={12} className="w-full bg-white dark:bg-purple-900 border border-slate-200 dark:border-purple-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition font-bold" />
                   <p className="text-[10px] text-slate-400 dark:text-purple-400 font-bold mt-1">가입하면 닉네임#0000 형식의 고유 코드가 자동 부여돼요</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">가입 유형</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setSignupRole('student')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${signupRole === 'student' ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>학생</button>
+                    <button type="button" onClick={() => setSignupRole('parent')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${signupRole === 'parent' ? 'bg-indigo-500 text-white shadow' : 'bg-slate-100 dark:bg-purple-800 text-slate-500 dark:text-purple-300'}`}>학부모</button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1.5 text-slate-500 dark:text-purple-300">비밀번호 <span className="text-slate-400">(6자 이상)</span></label>
@@ -721,7 +733,14 @@ export default function App() {
         )}
 
         {/* ======================= 과외 탭 ======================= */}
-        {activeTab === 'tutor' && (
+        {activeTab === 'tutor' && currentUser?.role === 'parent' ? (
+          <ParentTab
+            currentUser={currentUser} renderHeader={renderHeader}
+            parentChildren={parentChildren} parentChildBoard={parentChildBoard} setParentChildBoard={setParentChildBoard}
+            parentChildRecords={parentChildRecords} parentLoading={parentLoading}
+            fetchParentChildren={fetchParentChildren} openParentChildBoard={openParentChildBoard}
+          />
+        ) : activeTab === 'tutor' && (
           <TutorTab
             currentUser={currentUser} events={events} studyRecords={studyRecords}
             decimalToTime={decimalToTime} timeToDecimal={timeToDecimal} setActiveTab={setActiveTab}
@@ -733,6 +752,8 @@ export default function App() {
             setAdminMode={setAdminMode} registerTutorStudent={registerTutorStudent}
             unregisterTutorStudent={unregisterTutorStudent} openTutorBoard={openTutorBoard}
             saveTutorBoard={saveTutorBoard} fetchTutorStudents={fetchTutorStudents} adminMode={adminMode}
+            tutorParents={tutorParents}
+            linkParentChild={linkParentChild} unlinkParentChild={unlinkParentChild}
           />
         )}
 
