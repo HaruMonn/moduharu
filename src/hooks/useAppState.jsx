@@ -179,8 +179,6 @@ export function useAppState() {
   const [requests, setRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [requestsError, setRequestsError] = useState('');
-  const [examQuestions, setExamQuestions] = useState([]);
-  const [examQuestionsLoading, setExamQuestionsLoading] = useState(false);
   const [newRequestTitle, setNewRequestTitle] = useState('');
   const [newRequestBody, setNewRequestBody] = useState('');
   const [newRequestCategory, setNewRequestCategory] = useState('기능 건의');
@@ -954,33 +952,6 @@ export function useAppState() {
     } finally {
       setRequestsLoading(false);
     }
-  };
-
-  // ---- 모의고사 기출문제 ----
-  const fetchExamQuestions = async () => {
-    if (!sessionToken) return;
-    setExamQuestionsLoading(true);
-    try {
-      const data = await tutorFetch('/exam-questions');
-      setExamQuestions(data.questions || []);
-    } catch (e) { console.error(e); }
-    finally { setExamQuestionsLoading(false); }
-  };
-
-  const addExamQuestion = async (question) => {
-    try {
-      const data = await tutorFetch('/exam-questions', {
-        method: 'POST', body: JSON.stringify(question),
-      });
-      setExamQuestions(data.questions || []);
-    } catch (e) { console.error(e); throw e; }
-  };
-
-  const deleteExamQuestion = async (id) => {
-    try {
-      const data = await tutorFetch(`/exam-questions/${id}`, { method: 'DELETE' });
-      setExamQuestions(data.questions || []);
-    } catch (e) { console.error(e); }
   };
 
 // 마운트 시 1회성 데이터 로딩 — SPA 표준 패턴이므로 의도적 예외 처리
@@ -1834,7 +1805,6 @@ export function useAppState() {
     parentChildRecords, parentLoading, fetchParentChildren, openParentChildBoard,
     tutorParents, fetchTutorParents, linkParentChild, unlinkParentChild,
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
-    examQuestions, examQuestionsLoading, fetchExamQuestions, addExamQuestion, deleteExamQuestion,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
     setFormTitle, formStart, setFormStart, formEnd, setFormEnd, formColor,
     setFormColor, formDay, setFormDay, isTimerRunning, setIsTimerRunning, timerSeconds, setTimerSeconds, currentStudy,
