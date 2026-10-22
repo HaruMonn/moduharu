@@ -4,17 +4,16 @@ import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
 import ParentTab from './components/ParentTab.jsx';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS, APP_VERSION } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Share2, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 
 export default function App() {
   const {
-    activeTab, setActiveTab, showStats, setShowStats,
-    showSettings, setShowSettings, showOnboarding, onboardingFade, showPolicy, setShowPolicy,
+    activeTab, setActiveTab,
+    showSettings, setShowSettings, showAdminPin, setShowAdminPin, showOnboarding, onboardingFade, showPolicy, setShowPolicy,
     showDday, setShowDday, serverUrlInput, setServerUrlInput, currentServerBase, saveServerUrl,
     showSplash, splashFade, videoRef, finishSplash, exitToast, themeColor,
     setThemeColor, THEME_COLORS, todos, events, studyRecords, dday,
@@ -35,7 +34,7 @@ export default function App() {
     fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
     openTutorBoard, saveTutorBoard, fetchMyBoard,
     tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
-    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
+    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView, boardModal, setBoardModal,
     parentChildren, parentChildBoard, setParentChildBoard, parentChildRecords, parentLoading,
     fetchParentChildren, openParentChildBoard, tutorParents, fetchTutorParents,
     linkParentChild, unlinkParentChild,
@@ -47,7 +46,7 @@ export default function App() {
     setNoiseType, isFocusMode, setIsFocusMode, isTimerModalOpen, setIsTimerModalOpen, recordFormTitle,
     setRecordFormTitle, recordFormStart, setRecordFormStart, recordFormEnd, setRecordFormEnd, recordFormColor,
     setRecordFormColor, startPomodoro, togglePomodoroMode, formatPomodoro, getDdayString, getDdayCountdown,
-    editDday, todayKey, getMonthDays, heatColor, getMonthlySummary, newRoutineText,
+    editDday, todayKey, getMonthDays, heatColor, newRoutineText,
     setNewRoutineText, newRoutineFreq, setNewRoutineFreq, addRoutine, toggleRoutine, deleteRoutine,
     getRoutineStreak, newGoalText, setNewGoalText, newGoalTarget, setNewGoalTarget, addGoal,
     incGoal, deleteGoal, MOODS, saveDiary, todayDiary, startEditDiary,
@@ -56,12 +55,10 @@ export default function App() {
     notifEnabled, requestNotification, completeOnboarding, addTodo, toggleTodo, deleteTodo, isDarkMode, setIsDarkMode, currentTime,
     currentHourDecimal, decimalToTime, timeToDecimal, openModal, saveEvent, deleteEvent, toggleTimer, stopTimer,
     formatTimerDisplay, formatTimeHM, openTimerModal, saveRecord, deleteRecord, timerStartTime,
-    renderHeader, todayRecords, getTotalStudySeconds, getComparedToYesterday, getTodoCompletionRate, handleShare,
-    doughnutData, barData, captureAndShare,
+    renderHeader, todayRecords,
   } = useAppState();
 
-  // 과외 관리자 모드 PIN 모달
-  const [showAdminPin, setShowAdminPin] = useState(false);
+  // 과외 관리자 모드 PIN 입력 상태
   const [adminPin, setAdminPin] = useState('');
   const [adminPinMode, setAdminPinMode] = useState('enter'); // 'setup' | 'enter'
   const [adminPinError, setAdminPinError] = useState('');
@@ -748,7 +745,7 @@ export default function App() {
             tutorStudents={tutorStudents} tutorSummaries={tutorSummaries} tutorBoard={tutorBoard} tutorRecords={tutorRecords}
             tutorLoading={tutorLoading} tutorError={tutorError}
             tutorStudentCodeInput={tutorStudentCodeInput} setTutorStudentCodeInput={setTutorStudentCodeInput}
-            tutorView={tutorView} setTutorView={setTutorView}
+            tutorView={tutorView} setTutorView={setTutorView} boardModal={boardModal} setBoardModal={setBoardModal}
             setAdminMode={setAdminMode} registerTutorStudent={registerTutorStudent}
             unregisterTutorStudent={unregisterTutorStudent} openTutorBoard={openTutorBoard}
             saveTutorBoard={saveTutorBoard} fetchTutorStudents={fetchTutorStudents} adminMode={adminMode}
