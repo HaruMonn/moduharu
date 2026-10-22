@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, BarChart2, Settings, Bell } from 'lucide-react';
+import { Plus, Settings, Bell } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -51,8 +51,8 @@ export function useAppState() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('todo'); 
   const [selectedDay, setSelectedDay] = useState(new Date().getDay()); // 시간표 선택 요일 (0=일 ... 6=토)
-  const [showStats, setShowStats] = useState(false); // 통계 모달 상태
   const [showSettings, setShowSettings] = useState(false); // 설정 모달 상태
+  const [showAdminPin, setShowAdminPin] = useState(false); // 과외 관리자 PIN 모달 상태
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('lifestyle_onboarded')); // 온보딩
   const [onboardingFade, setOnboardingFade] = useState(false); // 시작하기 클릭 시 페이드 아웃
   const [showPolicy, setShowPolicy] = useState(false); // 개인정보/약관 모달
@@ -198,7 +198,7 @@ export function useAppState() {
   const getScoreBreakdown = () => {
     const today = new Date();
     const focusMin = Math.round(studyRecords.filter(r => r.startTime && isSameDay(r.startTime, today)).reduce((a, r) => a + r.duration, 0) / 60);
-    return { focusMin };
+  return { focusMin };
   };
 
   // 랭킹 불러오기
@@ -323,6 +323,7 @@ export function useAppState() {
   const [tutorError, setTutorError] = useState('');
   const [tutorStudentCodeInput, setTutorStudentCodeInput] = useState('');
   const [tutorView, setTutorView] = useState('home'); // 'home' | 'student'
+  const [boardModal, setBoardModal] = useState(null); // 과외 보드 추가/편집 모달 {section, item} | null
   // 학부모용 상태
   const [parentChildren, setParentChildren] = useState([]); // [{code, nickname}]
   const [parentChildBoard, setParentChildBoard] = useState(null); // {code, nickname, board}
@@ -337,33 +338,6 @@ export function useAppState() {
   const [announceTitle, setAnnounceTitle] = useState('');
   const [announceBody, setAnnounceBody] = useState('');
   const [lastSeenAnnounce, setLastSeenAnnounce] = useState(() => Number(localStorage.getItem('lifestyle_lastAnnounce') || 0));
-
-  // =================== [뒤로가기: 모달 열려있으면 닫기, 없으면 두 번 눌러 종료] ===================
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    let lastBack = 0;
-    let toastTimer = null;
-    const listener = CapApp.addListener('backButton', () => {
-      // 열린 모달이 있으면 모달을 닫고 종료하지 않음
-      if (showSettings) { setShowSettings(false); return; }
-      if (showUpdate) { setShowUpdate(false); return; }
-      if (showPolicy) { setShowPolicy(false); return; }
-      if (showNotif) { setShowNotif(false); return; }
-      const now = Date.now();
-      if (now - lastBack < 2000) {
-        CapApp.exitApp();
-      } else {
-        lastBack = now;
-        setExitToast(true);
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => setExitToast(false), 2000);
-      }
-    });
-    return () => {
-      listener.remove();
-      clearTimeout(toastTimer);
-    };
-  }, [showSettings, showUpdate, showPolicy, showNotif]);
 
   // =================== [관리자 상태] ===================
   const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('lifestyle_admin') === 'true');
@@ -1668,12 +1642,6 @@ export function useAppState() {
         </div>
       </div>
       <div className="flex gap-2 shrink-0">
-        {/* 통계 버튼 (할 일 / 타이머 탭에서 보임) */}
-        {(activeTab === 'todo' || activeTab === 'timer') && (
-          <button onClick={() => setShowStats(true)} className="p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
-            <BarChart2 size={20} />
-          </button>
-        )}
         {/* 알림 벨 (친구 요청/공지) */}
         <button onClick={openNotif} className="relative p-2.5 rounded-full bg-slate-100 dark:bg-purple-800 hover:bg-slate-200 dark:hover:bg-purple-700 transition">
           <Bell size={20} />
@@ -1769,9 +1737,58 @@ export function useAppState() {
     }).catch(err => { console.error(err); alert('캡처 중 오류가 발생했습니다.'); });
   };
 
+  // =================== [뒤로가기: 가장 위에 있는 화면부터 닫고, 아무것도 없으면 두 번 눌러 종료] ===================
+  // 뒤로가기 동작은 렌더마다 최신 상태를 담은 콜백으로 갱신하고, 네이티브 리스너는 1회만 등록한다.
+  // (Capacitor의 addListener는 Promise<handle>을 반환하므로, .then으로 받은 핸들로 정리해야 한다.)
+  // 이 블록은 참조하는 모든 상태/함수보다 뒤에 있어야 한다 (TDZ 방지).
+  const backTopmostRef = useRef(null);
+  useEffect(() => {
+    backTopmostRef.current = () => {
+      if (boardModal) { setBoardModal(null); return true; }
+      if (isModalOpen) { setIsModalOpen(false); return true; }
+      if (isTimerModalOpen) { setIsTimerModalOpen(false); return true; }
+      if (showAdminPin) { setShowAdminPin(false); return true; }
+      if (showDday) { setShowDday(false); return true; }
+      if (showUpdate) { setShowUpdate(false); return true; }
+      if (showPolicy) { setShowPolicy(false); return true; }
+      if (showNotif) { setShowNotif(false); return true; }
+      if (showSettings) { setShowSettings(false); return true; }
+      if (tutorView === 'student') { setTutorView('home'); fetchTutorStudents(); return true; }
+      if (parentChildBoard) { setParentChildBoard(null); return true; }
+      return false;
+    };
+  });
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return undefined;
+    let lastBack = 0;
+    let toastTimer = null;
+    let handle = null;
+    let cancelled = false;
+    CapApp.addListener('backButton', () => {
+      if (backTopmostRef.current && backTopmostRef.current()) return;
+      const now = Date.now();
+      if (now - lastBack < 2000) {
+        CapApp.exitApp();
+      } else {
+        lastBack = now;
+        setExitToast(true);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => setExitToast(false), 2000);
+      }
+    }).then((h) => {
+      if (cancelled) h.remove();
+      else handle = h;
+    });
+    return () => {
+      cancelled = true;
+      if (handle) handle.remove();
+      clearTimeout(toastTimer);
+    };
+  }, []);
+
   return {
     isDarkMode, setIsDarkMode, currentTime, setCurrentTime, activeTab, setActiveTab,
-    selectedDay, setSelectedDay, showStats, setShowStats, showSettings, setShowSettings,
+    selectedDay, setSelectedDay, showSettings, setShowSettings, showAdminPin, setShowAdminPin,
     showOnboarding, setShowOnboarding, onboardingFade, setOnboardingFade, showPolicy, setShowPolicy,
     showDday, setShowDday, serverUrlInput, setServerUrlInput, currentServerBase, setCurrentServerBase,
     saveServerUrl, showSplash, setShowSplash, splashFade, setSplashFade, videoRef,
@@ -1800,7 +1817,7 @@ export function useAppState() {
     fetchTutorStudents, registerTutorStudent, unregisterTutorStudent,
     openTutorBoard, saveTutorBoard, fetchMyBoard, syncStudyRecords,
     tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError, setTutorError,
-    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView,
+    tutorStudentCodeInput, setTutorStudentCodeInput, tutorView, setTutorView, boardModal, setBoardModal,
     parentChildren, setParentChildren, parentChildBoard, setParentChildBoard,
     parentChildRecords, parentLoading, fetchParentChildren, openParentChildBoard,
     tutorParents, fetchTutorParents, linkParentChild, unlinkParentChild,

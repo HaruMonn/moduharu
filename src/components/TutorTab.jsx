@@ -225,11 +225,10 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
 export default function TutorTab({
   currentUser, events, studyRecords, decimalToTime, timeToDecimal, setActiveTab, renderHeader,
   tutorStudents, tutorSummaries, tutorBoard, tutorRecords, tutorLoading, tutorError,
-  tutorView, setTutorView,
+  tutorView, setTutorView, boardModal, setBoardModal,
   adminMode, openTutorBoard, saveTutorBoard, fetchTutorStudents,
   tutorParents, linkParentChild, unlinkParentChild,
 }) {
-  const [boardModal, setBoardModal] = useState(null); // {section, item} | null
   const [linkSelect, setLinkSelect] = useState({}); // {parentCode: studentCode}
 
   const handleBoardSave = (section, item) => {
