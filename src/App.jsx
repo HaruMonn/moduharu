@@ -3,8 +3,9 @@ import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
 import ParentTab from './components/ParentTab.jsx';
+import ChatTab from './components/ChatTab.jsx';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS, APP_VERSION } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, MessagesSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -38,6 +39,9 @@ export default function App() {
     parentChildren, parentChildBoard, setParentChildBoard, parentChildRecords, parentLoading,
     fetchParentChildren, openParentChildBoard, tutorParents, fetchTutorParents,
     linkParentChild, unlinkParentChild,
+    chatThreads, chatUnread, chatLoading, chatError, setChatError,
+    fetchChatThreads, fetchChatThread, sendChatMessage, markChatSeen,
+    chatOpenCode, setChatOpenCode,
     newTodoText, setNewTodoText, newTodoCategory, setNewTodoCategory,
     isModalOpen, setIsModalOpen, editingEvent, formTitle, setFormTitle, formStart,
     setFormStart, formEnd, setFormEnd, formColor, setFormColor, formDay, setFormDay, isTimerRunning,
@@ -754,6 +758,16 @@ export default function App() {
           />
         )}
 
+        {/* ======================= 채팅 탭 (선생님↔학생 1:1, 학부모 제외) ======================= */}
+        {activeTab === 'chat' && currentUser?.role !== 'parent' && (
+          <ChatTab
+            currentUser={currentUser}
+            chatThreads={chatThreads} chatUnread={chatUnread} chatLoading={chatLoading} chatError={chatError} setChatError={setChatError}
+            fetchChatThreads={fetchChatThreads} fetchChatThread={fetchChatThread} sendChatMessage={sendChatMessage} markChatSeen={markChatSeen}
+            chatOpenCode={chatOpenCode} setChatOpenCode={setChatOpenCode}
+          />
+        )}
+
         {/* ======================= 하단 네비게이션 ======================= */}
         <nav className="absolute bottom-0 w-full nav-safe bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40">
           {adminMode && (
@@ -786,6 +800,16 @@ export default function App() {
             <button onClick={() => setActiveTab('tutor')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'tutor' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
               <GraduationCap size={24} className={activeTab === 'tutor' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
               <span className="text-[10px] font-bold">과외</span>
+            </button>
+          )}
+
+          {currentUser && currentUser.role !== 'parent' && (
+            <button onClick={() => setActiveTab('chat')} className={`relative flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'chat' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+              <MessagesSquare size={24} className={activeTab === 'chat' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+              {Object.values(chatUnread || {}).some(Boolean) && (
+                <span className="absolute top-2 right-4 w-2.5 h-2.5 rounded-full bg-rose-500" />
+              )}
+              <span className="text-[10px] font-bold">채팅</span>
             </button>
           )}
 

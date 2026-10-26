@@ -330,6 +330,13 @@ export function useAppState() {
   const [parentChildRecords, setParentChildRecords] = useState([]);
   const [parentLoading, setParentLoading] = useState(false);
   const [tutorParents, setTutorParents] = useState([]); // [{code, nickname, linkedChildren}]
+  // 1:1 채팅 상태 (선생님↔학생, 학부모 제외)
+  const [chatThreads, setChatThreads] = useState([]); // [{otherCode, otherNickname, messageCount, lastMessage}]
+  const [chatUnread, setChatUnread] = useState({}); // {otherCode: true}
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [chatOpenCode, setChatOpenCode] = useState(null); // 열린 스레드의 상대 코드 (뒤로가기 처리용)
+  const seenChatRef = useRef({ code: null, seen: {}, init: false }); // {otherCode: lastSeenMessageId}
   const [friends, setFriends] = useState([]); // {code, nickname}[]
   const [friendRequests, setFriendRequests] = useState([]); // 받은 친구 요청 {fromCode, fromNickname, at}[]
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -462,6 +469,7 @@ export function useAppState() {
     setSessionToken('');
     setAdminMode(false);
     setTutorStudents([]); setTutorSummaries({}); setTutorBoard(null); setTutorRecords([]); setTutorView('home');
+    setChatThreads([]); setChatUnread({}); setChatError(''); setChatOpenCode(null);
     setShowSettings(false);
   };
 
@@ -614,6 +622,62 @@ export function useAppState() {
     } catch (e) { setTutorError(e.message); }
   };
 
+  // ---- 1:1 채팅 (선생님↔학생, 서버가 세션 기준으로 격리) ----
+  const getSeenChat = (code) => {
+    let st = seenChatRef.current;
+    if (st.code !== code) {
+      let seen = {};
+      let init = false;
+      try {
+        const raw = localStorage.getItem(`lifestyle_seenChat_${code}`);
+        if (raw !== null) { seen = JSON.parse(raw) || {}; init = true; }
+      } catch { /* 무시 */ }
+      st = { code, seen, init };
+      seenChatRef.current = st;
+    }
+    return st;
+  };
+
+  const fetchChatThreads = async () => {
+    if (!currentUser?.code || !sessionToken) return [];
+    setChatLoading(true);
+    try {
+      const data = await tutorFetch('/tutor/chat/threads');
+      const list = data.threads || [];
+      setChatThreads(list);
+      const st = getSeenChat(currentUser.code);
+      const unread = {};
+      list.forEach((t) => {
+        if (t.lastMessage && t.lastMessage.fromRole !== currentUser.role && t.lastMessage.id !== st.seen[t.otherCode]) {
+          unread[t.otherCode] = true;
+        }
+      });
+      setChatUnread(unread);
+      return list;
+    } catch (e) { console.error(e); return []; }
+    finally { setChatLoading(false); }
+  };
+
+  const fetchChatThread = async (otherCode) => {
+    const data = await tutorFetch(`/tutor/chat/thread/${encodeURIComponent(otherCode)}`);
+    return data; // {teacherCode, studentCode, otherNickname, messages}
+  };
+
+  const sendChatMessage = async (otherCode, text) => {
+    const data = await tutorFetch(`/tutor/chat/thread/${encodeURIComponent(otherCode)}`, {
+      method: 'POST', body: JSON.stringify({ text }),
+    });
+    return data.messages || [];
+  };
+
+  const markChatSeen = (otherCode, lastId) => {
+    if (!currentUser?.code || !lastId) return;
+    const st = getSeenChat(currentUser.code);
+    st.seen = { ...st.seen, [otherCode]: lastId };
+    try { localStorage.setItem(`lifestyle_seenChat_${currentUser.code}`, JSON.stringify(st.seen)); } catch { /* 무시 */ }
+    setChatUnread((prev) => { const m = { ...prev }; delete m[otherCode]; return m; });
+  };
+
   const saveTutorBoard = async (board) => {
     if (!tutorBoard) return;
     setTutorLoading(true); setTutorError('');
@@ -752,6 +816,39 @@ export function useAppState() {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, sessionToken, sendNotification, adminMode]);
+
+  // ---- 새 채팅 메시지 폴링 (60초마다) — 상대가 보낸 새 메시지면 알림 ----
+  useEffect(() => {
+    if (!currentUser || !sessionToken || currentUser.role === 'parent') return;
+    const code = currentUser.code;
+    const myRole = currentUser.role;
+    const st = getSeenChat(code);
+    const t = setInterval(async () => {
+      try {
+        const data = await tutorFetch('/tutor/chat/threads');
+        const list = data.threads || [];
+        setChatThreads(list);
+        const unread = {};
+        list.forEach((th) => {
+          const last = th.lastMessage;
+          if (!last) return;
+          if (last.fromRole !== myRole && last.id !== st.seen[th.otherCode]) {
+            unread[th.otherCode] = true;
+            if (st.init) {
+              const preview = last.text.length > 40 ? `${last.text.slice(0, 40)}…` : last.text;
+              sendNotification('💬 새 메시지가 왔어요!', `${th.otherNickname}: ${preview}`);
+            }
+          }
+          st.seen[th.otherCode] = last.id;
+        });
+        st.init = true;
+        try { localStorage.setItem(`lifestyle_seenChat_${code}`, JSON.stringify(st.seen)); } catch { /* 무시 */ }
+        setChatUnread(unread);
+      } catch { /* 폴링 실패는 조용히 무시 */ }
+    }, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, sessionToken, sendNotification]);
 
   // ---- 친구 요청 보내기 ----
   const addFriend = async () => {
@@ -1755,6 +1852,7 @@ export function useAppState() {
       if (showSettings) { setShowSettings(false); return true; }
       if (tutorView === 'student') { setTutorView('home'); fetchTutorStudents(); return true; }
       if (parentChildBoard) { setParentChildBoard(null); return true; }
+      if (chatOpenCode) { setChatOpenCode(null); fetchChatThreads(); return true; }
       return false;
     };
   });
@@ -1821,6 +1919,9 @@ export function useAppState() {
     parentChildren, setParentChildren, parentChildBoard, setParentChildBoard,
     parentChildRecords, parentLoading, fetchParentChildren, openParentChildBoard,
     tutorParents, fetchTutorParents, linkParentChild, unlinkParentChild,
+    chatThreads, chatUnread, chatLoading, chatError, setChatError,
+    fetchChatThreads, fetchChatThread, sendChatMessage, markChatSeen,
+    chatOpenCode, setChatOpenCode,
     hasNewNotif, openNotif, fetchRequests, newTodoText, setNewTodoText, newTodoCategory,
     setNewTodoCategory, isModalOpen, setIsModalOpen, editingEvent, setEditingEvent, formTitle,
     setFormTitle, formStart, setFormStart, formEnd, setFormEnd, formColor,
