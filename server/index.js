@@ -986,6 +986,114 @@ app.get('/api/tutor/records/:code', requireSession, async (req, res) => {
   }
 });
 
+// =================== 1:1 채팅 (선생님↔학생 전용, 학부모 제외) ===================
+// 룸은 (선생님 코드, 학생 코드) 쌍으로만 존재 — 학생 간 룸은 만들 수 없음
+const CHAT_MAX_TEXT = 1000;
+const CHAT_MAX_MESSAGES = 500;
+
+const chatRoomKey = (teacherCode, studentCode) => `${teacherCode}::${studentCode}`;
+
+// 세션 기준으로 스레드의 양쪽 당사자를 확정.
+// 선생님은 자기 코드가 teacherCode일 때만, 학생은 자기 코드가 studentCode일 때만 접근.
+// 상대 코드를 직접 넘겨도, 세션과 맞지 않으면 403 — 클라이언트 숨김만으로 막는 게 아님.
+function resolveChatThread(me, otherCode, users) {
+  const other = findUserByCode(users, otherCode);
+  if (!other) return { error: 404, message: '대화 상대를 찾을 수 없어요.' };
+  if (me.role === 'teacher') {
+    if (other.role !== 'student') return { error: 403, message: '채팅할 수 없는 상대예요.' };
+    return { teacher: me, student: other };
+  }
+  if (me.role === 'student') {
+    if (other.role !== 'teacher') return { error: 403, message: '채팅할 수 없는 상대예요.' };
+    return { teacher: other, student: me };
+  }
+  return { error: 403, message: '채팅을 쓸 수 없는 계정이에요.' };
+}
+
+const chatThreadSummary = (thread, other) => {
+  const messages = thread?.messages || [];
+  const last = messages.length ? messages[messages.length - 1] : null;
+  return {
+    otherCode: other.code,
+    otherNickname: other.nickname,
+    messageCount: messages.length,
+    lastMessage: last ? { id: last.id, fromRole: last.fromRole, text: last.text, createdAt: last.createdAt } : null,
+  };
+};
+
+// ---- 스레드 목록: 선생님은 학생별, 학생은 선생님별 (학부모는 403) ----
+app.get('/api/tutor/chat/threads', requireSession, async (req, res) => {
+  try {
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const threads = record.chatThreads || {};
+    if (req.me.role === 'teacher') {
+      const list = users
+        .filter((u) => u.role === 'student')
+        .map((s) => chatThreadSummary(threads[chatRoomKey(req.me.code, s.code)], s));
+      return res.json({ threads: list });
+    }
+    if (req.me.role === 'student') {
+      const list = users
+        .filter((u) => u.role === 'teacher')
+        .map((t) => chatThreadSummary(threads[chatRoomKey(t.code, req.me.code)], t));
+      return res.json({ threads: list });
+    }
+    return res.status(403).json({ error: '채팅을 쓸 수 없는 계정이에요.' });
+  } catch {
+    res.status(500).json({ error: '채팅 목록을 불러오지 못했어요.' });
+  }
+});
+
+// ---- 스레드 메시지 조회 ----
+app.get('/api/tutor/chat/thread/:otherCode', requireSession, async (req, res) => {
+  try {
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const r = resolveChatThread(req.me, req.params.otherCode, users);
+    if (r.error) return res.status(r.error).json({ error: r.message });
+    const thread = (record.chatThreads || {})[chatRoomKey(r.teacher.code, r.student.code)];
+    res.json({
+      teacherCode: r.teacher.code,
+      studentCode: r.student.code,
+      otherNickname: req.me.role === 'teacher' ? r.student.nickname : r.teacher.nickname,
+      messages: thread?.messages || [],
+    });
+  } catch {
+    res.status(500).json({ error: '메시지를 불러오지 못했어요.' });
+  }
+});
+
+// ---- 메시지 전송 (스레드가 없으면 첫 메시지와 함께 생성) ----
+app.post('/api/tutor/chat/thread/:otherCode', requireSession, async (req, res) => {
+  try {
+    const text = cleanStr(req.body?.text, CHAT_MAX_TEXT);
+    if (!text) return res.status(400).json({ error: '메시지를 입력해주세요.' });
+    const record = await readBin(USERS_BIN);
+    const users = record.users || [];
+    const r = resolveChatThread(req.me, req.params.otherCode, users);
+    if (r.error) return res.status(r.error).json({ error: r.message });
+    const threads = record.chatThreads || {};
+    const key = chatRoomKey(r.teacher.code, r.student.code);
+    const thread = threads[key] || { teacherCode: r.teacher.code, studentCode: r.student.code, messages: [] };
+    thread.messages = [
+      ...thread.messages,
+      {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        fromCode: req.me.code,
+        fromRole: req.me.role,
+        text,
+        createdAt: new Date().toISOString(),
+      },
+    ].slice(-CHAT_MAX_MESSAGES);
+    threads[key] = thread;
+    await writeBin(USERS_BIN, { ...record, chatThreads: threads });
+    res.json({ messages: thread.messages });
+  } catch {
+    res.status(500).json({ error: '메시지 전송에 실패했어요.' });
+  }
+});
+
 // =================== 프로덕션 정적 서빙 (Render 등 단일 서비스용) ===================
 const distDir = path.join(__dirname, '..', 'dist');
 app.use(express.static(distDir));
