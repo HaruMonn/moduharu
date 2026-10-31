@@ -3,9 +3,10 @@ import { useAppState } from './hooks/useAppState';
 import SoftSelect from './components/SoftSelect';
 import TutorTab from './components/TutorTab.jsx';
 import ParentTab from './components/ParentTab.jsx';
+import StudyRouteTab from './components/StudyRouteTab.jsx';
 import ChatTab from './components/ChatTab.jsx';
 import { COLOR_OPTIONS, TIMER_COLORS, DAY_LABELS, APP_VERSION } from './constants.js';
-import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, MessagesSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap } from 'lucide-react';
+import { X, Trash2, Calendar, CheckSquare, Play, Pause, Square, Check, Circle, Bell, Cloud, Upload, Download, Info, Apple, MessageSquare, MessagesSquare, Palette, LogOut, User, ShieldCheck, Server, Sun, Moon, Timer as TimerIcon, GraduationCap, BookOpen } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -768,6 +769,11 @@ export default function App() {
           />
         )}
 
+        {/* ======================= 공부 루트 탭 (선생님 전용 — 학생·학부모에게 안 보임) ======================= */}
+        {activeTab === 'study' && currentUser?.role === 'teacher' && (
+          <StudyRouteTab />
+        )}
+
         {/* ======================= 하단 네비게이션 ======================= */}
         <nav className="absolute bottom-0 w-full nav-safe bg-white/90 dark:bg-purple-900/90 backdrop-blur-md border-t border-slate-100 dark:border-purple-800 flex items-center justify-around px-2 z-40">
           {adminMode && (
@@ -800,6 +806,13 @@ export default function App() {
             <button onClick={() => setActiveTab('tutor')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'tutor' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
               <GraduationCap size={24} className={activeTab === 'tutor' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
               <span className="text-[10px] font-bold">과외</span>
+            </button>
+          )}
+
+          {currentUser?.role === 'teacher' && (
+            <button onClick={() => setActiveTab('study')} className={`flex flex-1 flex-col items-center justify-center h-full transition-all ${activeTab === 'study' ? 'text-slate-800 dark:text-purple-100' : 'text-slate-400 dark:text-purple-400 hover:text-slate-600 dark:hover:text-purple-300'}`}>
+              <BookOpen size={24} className={activeTab === 'study' ? 'drop-shadow-sm scale-110 mb-1' : 'mb-1 transition-transform'} />
+              <span className="text-[10px] font-bold">공부루트</span>
             </button>
           )}
 
