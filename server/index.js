@@ -607,9 +607,10 @@ const canWriteBoard = (me, student) =>
   !!student && (sameCode(me.code, student.code) || isTeacherOf(me, student));
 
 // 선생님은 모든 학생을 볼 수 있음 (코드 등록 불필요 — 앱을 선생님 학생들하고만 씀)
+// 학부모는 학생 목록에서 제외 (role === 'student'만)
 const studentListOf = (users) =>
   users
-    .filter((u) => u.role !== 'teacher')
+    .filter((u) => u.role === 'student')
     .map((u) => ({ code: u.code, nickname: u.nickname }));
 
 const cleanStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -814,7 +815,7 @@ app.get('/api/tutor/students/summary', requireSession, async (req, res) => {
     };
 
     const students = users
-      .filter((u) => u.role !== 'teacher')
+      .filter((u) => u.role === 'student')
       .map((u) => {
         const v = withTutorDefaults(u);
         const recs = v.studyRecords || [];
