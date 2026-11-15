@@ -581,11 +581,12 @@ const withTutorDefaults = (u) => {
   if (!v.role) v.role = null;
   if (!('teacherCode' in v)) v.teacherCode = null;
   if (!Array.isArray(v.studentCodes)) v.studentCodes = [];
-  if (!v.board || typeof v.board !== 'object') v.board = { timetable: [], schedule: [], homework: [] };
+  if (!v.board || typeof v.board !== 'object') v.board = { timetable: [], schedule: [], homework: [], scores: [] };
   else {
     if (!Array.isArray(v.board.timetable)) v.board.timetable = [];
     if (!Array.isArray(v.board.schedule)) v.board.schedule = [];
     if (!Array.isArray(v.board.homework)) v.board.homework = [];
+    if (!Array.isArray(v.board.scores)) v.board.scores = [];
   }
   if (!Array.isArray(v.studyRecords)) v.studyRecords = [];
   if (!Array.isArray(v.sessions)) v.sessions = [];
@@ -615,7 +616,7 @@ const studentListOf = (users) =>
 
 const cleanStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
-// 보드 섹션 검증 — timetable | schedule | homework
+// 보드 섹션 검증 — timetable | schedule | homework | scores
 function validateBoardSection(items, kind) {
   if (!Array.isArray(items) || items.length > 300) return null;
   const out = [];
@@ -652,6 +653,13 @@ function validateBoardSection(items, kind) {
         doneAt: it.doneAt || null,
         createdAt: it.createdAt || new Date().toISOString(),
       });
+    } else if (kind === 'scores') {
+      // 단어 시험 점수 기록: 날짜·점수·만점 필수, 0 <= 점수 <= 만점
+      const date = typeof it.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(it.date) ? it.date : null;
+      const score = Number(it.score);
+      const total = Number(it.total);
+      if (!date || !(score >= 0) || !(total > 0) || score > total) return null;
+      out.push({ ...base, date, score, total });
     } else return null;
   }
   return out;
@@ -944,12 +952,16 @@ app.put('/api/tutor/board/:code', requireSession, async (req, res) => {
     const timetable = validateBoardSection(board?.timetable, 'timetable');
     const schedule = validateBoardSection(board?.schedule, 'schedule');
     const homework = validateBoardSection(board?.homework, 'homework');
-    if (!timetable || !schedule || !homework) return res.status(400).json({ error: '보드 형식이 올바르지 않아요.' });
+    // scores가 없으면(구버전 앱) 기존 점수 기록을 그대로 유지 — 구버전 저장이 실패하지 않게
+    const scores = board?.scores === undefined
+      ? (withTutorDefaults(student).board.scores || [])
+      : validateBoardSection(board.scores, 'scores');
+    if (!timetable || !schedule || !homework || !scores) return res.status(400).json({ error: '보드 형식이 올바르지 않아요.' });
     const updated = users.map((u) =>
-      sameCode(u.code, student.code) ? { ...withTutorDefaults(u), board: { timetable, schedule, homework } } : u
+      sameCode(u.code, student.code) ? { ...withTutorDefaults(u), board: { timetable, schedule, homework, scores } } : u
     );
     await writeBin(USERS_BIN, { ...record, users: updated });
-    res.json({ ok: true, board: { timetable, schedule, homework } });
+    res.json({ ok: true, board: { timetable, schedule, homework, scores } });
   } catch {
     res.status(500).json({ error: '보드 저장에 실패했어요.' });
   }

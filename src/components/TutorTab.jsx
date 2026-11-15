@@ -110,15 +110,27 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
   const [subject, setSubject] = useState(item?.subject || '');
   const [dueDate, setDueDate] = useState(item?.dueDate || '');
   const [done, setDone] = useState(!!item?.done);
+  const [score, setScore] = useState(item?.score ?? '');
+  const [total, setTotal] = useState(item?.total ?? 30);
   const [err, setErr] = useState('');
+  // eslint-disable-next-line react-hooks/purity -- 모달 열 때 기준 오늘 날짜 계산
+  const todayStr = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const sectionTitle = section === 'timetable' ? '시간표 항목' : section === 'schedule' ? '과외 시간표' : '숙제';
+  const sectionTitle = section === 'timetable' ? '시간표 항목' : section === 'schedule' ? '과외 시간표' : section === 'scores' ? '단어 시험 점수' : '숙제';
 
   const submit = () => {
     if (!title.trim()) { setErr('제목을 입력해주세요.'); return; }
+    if (section === 'scores') {
+      const dateStr = date || todayStr;
+      const sc = Number(score);
+      const tt = Number(total);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || isNaN(sc) || isNaN(tt) || tt <= 0 || sc < 0 || sc > tt) { setErr('날짜와 점수(0~만점)를 확인해주세요.'); return; }
+      onSave({ id: item?.id ?? Date.now(), title: title.trim(), color, note: note.trim(), date: dateStr, score: sc, total: tt });
+      return;
+    }
     const s = timeToDecimal(start);
     const e = timeToDecimal(end);
-    if (section !== 'homework' && (isNaN(s) || isNaN(e) || s >= e)) { setErr('종료 시간은 시작 시간보다 늦어야 해요.'); return; }
+    if ((section === 'timetable' || section === 'schedule') && (isNaN(s) || isNaN(e) || s >= e)) { setErr('종료 시간은 시작 시간보다 늦어야 해요.'); return; }
     const base = { id: item?.id ?? Date.now(), title: title.trim(), color, note: note.trim() };
     if (section === 'timetable') onSave({ ...base, day: Number(day), start: s, end: e });
     else if (section === 'schedule') onSave({ ...base, date: useDate && date ? date : null, day: useDate ? null : Number(day), start: s, end: e });
@@ -140,6 +152,24 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
             <label className={labelCls}>제목</label>
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 수학 과외" className={inputCls} />
           </div>
+          {section === 'scores' && (
+            <>
+              <div>
+                <label className={labelCls}>시험 날짜</label>
+                <input type="date" value={date || todayStr} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className={labelCls}>점수</label>
+                  <input type="number" min="0" value={score} onChange={(e) => setScore(e.target.value)} placeholder="예: 9" className={inputCls} />
+                </div>
+                <div className="flex-1">
+                  <label className={labelCls}>만점</label>
+                  <input type="number" min="1" value={total} onChange={(e) => setTotal(e.target.value)} placeholder="예: 30" className={inputCls} />
+                </div>
+              </div>
+            </>
+          )}
           {section === 'homework' && (
             <>
               <div>
@@ -184,7 +214,7 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
               )}
             </div>
           )}
-          {section !== 'homework' && (
+          {(section === 'timetable' || section === 'schedule') && (
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className={labelCls}>시작</label>
@@ -196,6 +226,7 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
               </div>
             </div>
           )}
+          {section !== 'scores' && (
           <div>
             <label className={labelCls}>색상</label>
             <div className="flex gap-2 flex-wrap">
@@ -205,6 +236,7 @@ function BoardItemModal({ section, item, onClose, onSave, onDelete, decimalToTim
               ))}
             </div>
           </div>
+          )}
           <div>
             <label className={labelCls}>메모</label>
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="메모 (선택)" className={inputCls} />
@@ -260,6 +292,7 @@ export default function TutorTab({
     return `${when} ${decimalToTime(it.start)}-${decimalToTime(it.end)}${it.note ? ` · ${it.note}` : ''}`;
   };
   const tutorHomeworkMeta = (it) => `${it.subject ? `[${it.subject}] ` : ''}${it.dueDate ? `~${it.dueDate.slice(5).replace('-', '/')}까지` : ''}${it.note ? ` · ${it.note}` : ''}`;
+  const tutorScoresMeta = (it) => `${it.date ? `${it.date.slice(5).replace('-', '/')} · ` : ''}${it.score}/${it.total}점${it.note ? ` · ${it.note}` : ''}`;
 
   const tutorWeekTotal = (records) => {
     // eslint-disable-next-line react-hooks/purity -- 렌더 시점 기준 7일 컷오프 계산
@@ -321,6 +354,10 @@ export default function TutorTab({
               onAdd={() => setBoardModal({ section: 'homework', item: null })}
               onEdit={(it) => setBoardModal({ section: 'homework', item: it })}
               renderMeta={tutorHomeworkMeta} onToggle={toggleHomeworkDone} />
+            <BoardSection title="단어 시험 점수" emoji="📈" items={tutorBoard.board.scores || []} emptyText="기록된 점수가 없어요"
+              onAdd={() => setBoardModal({ section: 'scores', item: null })}
+              onEdit={(it) => setBoardModal({ section: 'scores', item: it })}
+              renderMeta={tutorScoresMeta} />
           </>
         ) : (
           <>
@@ -463,6 +500,8 @@ export default function TutorTab({
                 renderMeta={tutorScheduleMeta} allowAdd={false} allowEdit={false} />
               <BoardSection title="숙제" emoji="📝" items={tutorBoard.board.homework} emptyText="등록된 숙제가 없어요"
                 renderMeta={tutorHomeworkMeta} onToggle={toggleHomeworkDone} allowAdd={false} allowEdit={false} />
+              <BoardSection title="단어 시험 점수" emoji="📈" items={tutorBoard.board.scores || []} emptyText="기록된 점수가 없어요"
+                renderMeta={tutorScoresMeta} allowAdd={false} allowEdit={false} />
             </>
           ) : (
             <p className="text-xs text-slate-400 font-bold text-center py-10">보드를 불러오지 못했어요. 탭을 다시 열어주세요.</p>
