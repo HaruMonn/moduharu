@@ -29,6 +29,7 @@ export default function ParentTab({
     if (!selectedCode || !parentChildBoard) return null;
     const board = parentChildBoard.board || {};
     const homework = board.homework || [];
+    const scores = board.scores || [];
     const doneCount = homework.filter((h) => h.done).length;
     const hwRate = homework.length ? Math.round((doneCount / homework.length) * 100) : 0;
     const todayKey = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -39,13 +40,13 @@ export default function ParentTab({
     const weekMinutes = (parentChildRecords || [])
       .filter((r) => new Date(r.startTime).getTime() >= weekAgo)
       .reduce((s, r) => s + (r.durationSec || 0), 0) / 60;
-    return { board, homework, doneCount, hwRate, todayMinutes, weekMinutes };
+    return { board, homework, scores, doneCount, hwRate, todayMinutes, weekMinutes };
   }, [selectedCode, parentChildBoard, parentChildRecords]);
   /* eslint-enable react-hooks/purity */
 
   // 자녀 보드 상세 (읽기 전용)
   if (selectedCode && parentChildBoard && stats) {
-    const { board, homework, doneCount, hwRate, todayMinutes, weekMinutes } = stats;
+    const { board, homework, scores, doneCount, hwRate, todayMinutes, weekMinutes } = stats;
 
     return (
       <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-purple-950">
@@ -79,6 +80,22 @@ export default function ParentTab({
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <span className={h.done ? 'text-emerald-500' : 'text-slate-300'}>{h.done ? '✓' : '○'}</span>
                     <span className={h.done ? 'line-through text-slate-400' : 'text-slate-700 dark:text-purple-100 font-bold'}>{h.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="bg-white dark:bg-purple-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-purple-800">
+            <h3 className="font-black text-slate-700 dark:text-purple-100 mb-3">📈 단어 시험 점수 ({scores.length})</h3>
+            {scores.length === 0 ? (
+              <p className="text-sm text-slate-400">기록된 점수가 없어요</p>
+            ) : (
+              <div className="space-y-2">
+                {scores.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="font-bold text-slate-700 dark:text-purple-100">{s.title}</span>
+                    {s.date && <span className="text-slate-400 text-xs font-bold">{s.date.slice(5).replace('-', '/')}</span>}
+                    <span className="ml-auto font-black text-indigo-500">{s.score}/{s.total}점</span>
                   </div>
                 ))}
               </div>
@@ -132,7 +149,7 @@ export default function ParentTab({
                 className="bg-white dark:bg-purple-900 rounded-2xl p-4 border border-slate-100 dark:border-purple-800 shadow-sm text-left hover:opacity-80 transition"
               >
                 <p className="font-black text-slate-700 dark:text-purple-100">{child.nickname}</p>
-                <p className="text-xs text-slate-400 font-bold mt-1">공부 기록 · 숙제 · 시간표 보기</p>
+                <p className="text-xs text-slate-400 font-bold mt-1">공부 기록 · 숙제 · 시간표 · 단어 점수 보기</p>
               </button>
             ))}
           </>
