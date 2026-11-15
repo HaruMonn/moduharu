@@ -703,8 +703,9 @@ export function useAppState() {
   };
 
   // 학생: 공부 기록을 서버에 동기화 (선생님이 볼 수 있게)
+  // teacherCode는 가입 시 null이고 채우는 곳이 없어서, 조건에서 제외 (없으면 동기화가 영원히 안 됨)
   const syncStudyRecords = async () => {
-    if (currentUser?.role !== 'student' || !currentUser?.teacherCode || !sessionToken) return;
+    if (currentUser?.role !== 'student' || !sessionToken) return;
     try {
       await fetch(`${API_BASE}/tutor/records`, {
         method: 'POST',
@@ -726,7 +727,7 @@ export function useAppState() {
   };
 
   useEffect(() => {
-    if (adminMode || !currentUser?.teacherCode || !sessionToken) return;
+    if (adminMode || !sessionToken) return;
     const t = setTimeout(() => { syncStudyRecords(); }, 8000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
